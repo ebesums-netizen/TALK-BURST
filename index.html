@@ -316,9 +316,9 @@
         const typeA = document.getElementById('typeA').value;
         const typeB = document.getElementById('typeB').value;
 
+        // 同じタイプ同士の制限を撤廃、または以下のようにブラックなコメントを逆に表示させることも可能です
         if (typeA === typeB) {
-            alert("同じタイプ同士の組み合わせは鏡を見ているようで別の意味でホラーです。別の組み合わせを選んでください！");
-            return;
+            console.log("同族同士の鏡面合わせモード発動");
         }
 
         const url = `${GAS_API_URL}?action=getCompatibility&typeA=${typeA}&typeB=${typeB}&situation=1`;
