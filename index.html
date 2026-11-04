@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>異世界ギルドのブラック相性＆職種診断</title>
+    <style>
+        :root {
+            --bg-color: #1a1a24;
+            --card-bg: #262636;
+            --accent-color: #d97706;
+            --accent-hover: #b45309;
+            --text-main: #f3f4f6;
+            --text-sub: #9ca3af;
+            --danger-color: #ef4444;
+        }
+        body {
+            font-family: 'Helvetica Neue', Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            width: 100%;
+            max-width: 600px;
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            box-sizing: border-box;
+        }
+        h1 {
+            color: var(--accent-color);
+            font-size: 1.4rem;
+            text-align: center;
+            margin-top: 0;
+            margin-bottom: 20px;
+        }
+        .screen {
+            display: none;
+        }
+        .screen.active {
+            display: block;
+        }
+        button {
+            background-color: var(--accent-color);
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 6px;
+            font-size: 1rem;
+            cursor: pointer;
+            width: 100%;
+            margin-top: 12px;
+            transition: background 0.2s;
+        }
+        button:hover {
+            background-color: var(--accent-hover);
+        }
+        .btn-secondary {
+            background-color: #4b5563;
+        }
+        .btn-secondary:hover {
+            background-color: #374151;
+        }
+        select {
+            width: 100%;
+            padding: 12px;
+            margin-top: 8px;
+            margin-bottom: 15px;
+            background: #1f1f2e;
+            border: 1px solid #4b5563;
+            color: white;
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+        .question-box {
+            background: #1f1f2e;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 1px solid #374151;
+        }
+        .q-progress {
+            font-size: 0.85rem;
+            color: var(--accent-color);
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        .q-text {
+            font-size: 1.1rem;
+            line-height: 1.5;
+        }
+        .result-box {
+            background: #1f1f2e;
+            border-left: 4px solid var(--accent-color);
+            padding: 15px;
+            margin-top: 15px;
+            border-radius: 0 6px 6px 0;
+        }
+        .ad-banner {
+            border: 2px dashed #4b5563;
+            padding: 15px;
+            text-align: center;
+            margin-top: 20px;
+            border-radius: 6px;
+            background: rgba(255,255,255,0.02);
+        }
+        .my-type-badge {
+            display: inline-block;
+            background: #374151;
+            padding: 4px 10px;
+            border-radius: 4px;
+            color: var(--accent-color);
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>⚔️ 異世界ギルド：ブラック判定所 ⚔️</h1>
+
+    <!-- 画面1: メニュー画面 -->
+    <div id="screen-menu" class="screen active">
+        <p style="text-align: center; color: var(--text-sub);">あなたのギルド職種を判定し、他の冒険者との「限界会話時間」をシニカルに分析します。</p>
+        <button onclick="startDiagnosis()">📜 職種診断を始める (全12問)</button>
+        <button class="btn-secondary" onclick="showScreen('screen-compat')">👥 直接タイプを選んで相性判定</button>
+    </div>
+
+    <!-- 画面2: 診断質問画面 -->
+    <div id="screen-quiz" class="screen">
+        <div class="question-box">
+            <div id="q-progress" class="q-progress">質問 1 / 12</div>
+            <div id="q-text" class="q-text">ここに質問文が入ります</div>
+        </div>
+        <button onclick="answerQuestion(true)">はい（当てはまる）</button>
+        <button class="btn-secondary" onclick="answerQuestion(false)">いいえ（当てはまらない）</button>
+    </div>
+
+    <!-- 画面3: 自分の診断結果表示 -->
+    <div id="screen-my-result" class="screen">
+        <h3>🎉 あなたの判定職種</h3>
+        <div class="result-box">
+            <p><strong>タイプ:</strong> <span id="my-type-code" class="my-type-badge"></span></p>
+            <p><strong>ギルド職種:</strong> <span id="my-class-name" style="font-size: 1.2rem; font-weight: bold;"></span></p>
+            <p><strong>特徴:</strong> <span id="my-catch"></span></p>
+        </div>
+        <button onclick="goToCompatWithMyType()">🤝 他のキャラとのブラック相性を測る</button>
+        <button class="btn-secondary" onclick="showScreen('screen-menu')">トップに戻る</button>
+    </div>
+
+    <!-- 画面4: 相性チェッカー -->
+    <div id="screen-compat" class="screen">
+        <h3>👥 パーティー相性査定</h3>
+        <label>キャラクター A のタイプ:</label>
+        <select id="typeA"></select>
+
+        <label>キャラクター B のタイプ:</label>
+        <select id="typeB"></select>
+
+        <button onclick="fetchCompatibility()">ブラック査定を実行する</button>
+        <button class="btn-secondary" onclick="showScreen('screen-menu')">戻る</button>
+    </div>
+
+    <!-- 画面5: 相性査定結果表示 -->
+    <div id="screen-result" class="screen">
+        <h3>📊 査定結果レポート</h3>
+        <div class="result-box">
+            <p><strong>ペア:</strong> <span id="res-pair"></span></p>
+            <p><strong>限界会話時間:</strong> <span id="res-time" style="color: var(--danger-color); font-weight: bold;"></span></p>
+            <p><strong>ブラック解説:</strong><br><span id="res-comment" style="line-height: 1.6;"></span></p>
+        </div>
+
+        <div class="ad-banner">
+            <p style="font-size: 0.85rem; color: var(--text-sub); margin: 0 0 10px 0;">🎁 広告を見て耐性を強化しますか？</p>
+            <p style="font-size: 0.9rem; margin: 0 0 10px 0;"><strong id="res-item"></strong></p>
+            <button style="background: #059669; margin-top: 0;" onclick="watchAd()">【動画広告】ポーションを服用する (+30分延長)</button>
+        </div>
+
+        <button style="margin-top: 20px;" onclick="showScreen('screen-compat')">別のペアを査定する</button>
+    </div>
+</div>
+
+<script>
+    // ★GASのウェブアプリURLをここに設定
+    const GAS_API_URL = "YOUR_GAS_WEB_APP_URL";
+
+    // 16タイプのフォールバック用マスターデータ
+    const CHARACTERS_MASTER = {
+        "INTJ": { name: "魔導戦略士", catch: "論理・計画・洞察" },
+        "INTP": { name: "理論魔導士", catch: "分析・探究・抽象思考" },
+        "ENTJ": { name: "ギルド統率者", catch: "決断・統率・効率" },
+        "ENTP": { name: "からくり発明家", catch: "創造・議論・柔軟" },
+        "INFJ": { name: "星読みの提唱者", catch: "洞察・共感・理想" },
+        "INFP": { name: "精霊の仲介者", catch: "優しさ・価値観・創造" },
+        "ENFJ": { name: "伝説の勇者", catch: "調整・共感・導く力" },
+        "ENFP": { name: "精霊使い", catch: "情熱・創造・自由" },
+        "ISTJ": { name: "ギルド管理者", catch: "誠実・規律・実務力" },
+        "ISFJ": { name: "聖騎士の擁護者", catch: "献身・丁寧・支援" },
+        "ESTJ": { name: "鉄血の統率者", catch: "秩序・効率・管理" },
+        "ESFJ": { name: "宴の司会者", catch: "社交・調整・気配り" },
+        "ISTP": { name: "魔導機巧師", catch: "冷静・実践・柔軟" },
+        "ISFP": { name: "放浪の冒険家", catch: "感性・自由・優しさ" },
+        "ESTP": { name: "疾風の起業家", catch: "行動・瞬発・社交" },
+        "ESFP": { name: "吟遊詩人", catch: "明るさ・柔軟・社交" }
+    };
+
+    // 12問の質問データ (E/I, S/N, T/F, J/Pの4軸に対応)
+    const QUESTIONS = [
+        { text: "パーティーの宴会では自分から積極的に話しかけるほうだ", axis: "EI" },
+        { text: "大勢で過ごすより、一人の時間でエネルギーを充電したい", axis: "IE" },
+        { text: "初対面の相手ともすぐに会話を盛り上げることができる", axis: "EI" },
+        { text: "具体的な事実や目の前のデータを何よりも信用する", axis: "SN" },
+        { text: "未来の可能性や抽象的なアイデアを考えるのが好きだ", axis: "NS" },
+        { text: "現実的な手順よりも、全体のコンセプトや意味を重視する", axis: "NS" },
+        { text: "感情や人間関係よりも、客観的な論理と法則で決断する", axis: "TF" },
+        { text: "他人の気持ちに共感し、調和を保つことが何より大切だ", axis: "FT" },
+        { text: "問題が起きた時、情を挟まずに事実に基づいた効率的解決を選ぶ", axis: "TF" },
+        { text: "旅の計画はあらかじめきっちり立てて行動したい", axis: "JP" },
+        { text: "状況に応じて臨機応変に柔軟な対応をする方が得意だ", axis: "PJ" },
+        { text: "締め切りや約束事は必ず厳守する計画派だ", axis: "JP" }
+    ];
+
+    let currentQIndex = 0;
+    let scores = { E: 0, I: 0, S: 0, N: 0, T: 0, F: 0, J: 0, P: 0 };
+    let myCalculatedType = "INTJ";
+
+    // 画面初期化
+    window.onload = () => {
+        initSelectOptions();
+    };
+
+    function showScreen(screenId) {
+        document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+        document.getElementById(screenId).classList.add('active');
+    }
+
+    function initSelectOptions() {
+        const selectA = document.getElementById('typeA');
+        const selectB = document.getElementById('typeB');
+        selectA.innerHTML = '';
+        selectB.innerHTML = '';
+
+        for (let code in CHARACTERS_MASTER) {
+            let optionStr = `<option value="${code}">${code}（${CHARACTERS_MASTER[code].name}）</option>`;
+            selectA.innerHTML += optionStr;
+            selectB.innerHTML += optionStr;
+        }
+        selectB.selectedIndex = 1;
+    }
+
+    // 診断開始
+    function startDiagnosis() {
+        currentQIndex = 0;
+        scores = { E: 0, I: 0, S: 0, N: 0, T: 0, F: 0, J: 0, P: 0 };
+        renderQuestion();
+        showScreen('screen-quiz');
+    }
+
+    function renderQuestion() {
+        const q = QUESTIONS[currentQIndex];
+        document.getElementById('q-progress').innerText = `質問 ${currentQIndex + 1} / ${QUESTIONS.length}`;
+        document.getElementById('q-text').innerText = q.text;
+    }
+
+    // 回答処理とスコアリングロジック
+    function answerQuestion(isYes) {
+        const q = QUESTIONS[currentQIndex];
+        const primary = q.axis[0];
+        const secondary = q.axis[1];
+
+        if (isYes) {
+            scores[primary] += 1;
+        } else {
+            scores[secondary] += 1;
+        }
+
+        currentQIndex++;
+        if (currentQIndex < QUESTIONS.length) {
+            renderQuestion();
+        } else {
+            calculateTypeResult();
+        }
+    }
+
+    // 4軸判定からMBTIタイプ生成
+    function calculateTypeResult() {
+        const e_i = scores.E >= scores.I ? "E" : "I";
+        const s_n = scores.S >= scores.N ? "S" : "N";
+        const t_f = scores.T >= scores.F ? "T" : "F";
+        const j_p = scores.J >= scores.P ? "J" : "P";
+
+        myCalculatedType = `${e_i}${s_n}${t_f}${j_p}`;
+        const charInfo = CHARACTERS_MASTER[myCalculatedType] || CHARACTERS_MASTER["INTJ"];
+
+        document.getElementById('my-type-code').innerText = myCalculatedType;
+        document.getElementById('my-class-name').innerText = charInfo.name;
+        document.getElementById('my-catch').innerText = charInfo.catch;
+
+        showScreen('screen-my-result');
+    }
+
+    function goToCompatWithMyType() {
+        document.getElementById('typeA').value = myCalculatedType;
+        showScreen('screen-compat');
+    }
+
+    // バックエンド（GAS）通信処理
+    async function fetchCompatibility() {
+        const typeA = document.getElementById('typeA').value;
+        const typeB = document.getElementById('typeB').value;
+
+        if (typeA === typeB) {
+            alert("同じタイプ同士の組み合わせは鏡を見ているようで別の意味でホラーです。別の組み合わせを選んでください！");
+            return;
+        }
+
+        const url = `${GAS_API_URL}?action=getCompatibility&typeA=${typeA}&typeB=${typeB}&situation=1`;
+
+        try {
+            const response = await fetch(url);
+            const data = await response.json();
+
+            document.getElementById('res-pair').innerText = `${data.type_a} × ${data.type_b}`;
+            document.getElementById('res-time').innerText = `${data.limit_minutes} 分`;
+            document.getElementById('res-comment').innerText = data.black_comment;
+            document.getElementById('res-item').innerText = `特効薬: ${data.recovery_item}`;
+
+            showScreen('screen-result');
+        } catch (e) {
+            alert("通信エラーが発生しました。GASのURL設定またはデプロイ状況を確認してください。");
+            console.error(e);
+        }
+    }
+
+    function watchAd() {
+        alert("【デモ】15秒の動画広告再生完了！ 会話時間が30分延長され、相手の脳内マニュアルが解放されました。");
+        document.getElementById('res-time').innerText = "45 分 (ポーション効果発動中)";
+    }
+</script>
+
+</body>
+</html>
