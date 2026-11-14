@@ -146,6 +146,12 @@
         @keyframes pop { 0% { transform: scale(.85); } 60% { transform: scale(1.08); } 100% { transform: scale(1); } }
         .hopL { animation: hopL .3s ease-out; } .hopR { animation: hopR .3s ease-out; } .pop { animation: pop .5s ease-out; }
         @media (prefers-reduced-motion: reduce) { .hopL, .hopR, .pop { animation: none; } }
+        @keyframes eh { 0%,100% { transform: translateY(0) scale(1.06,.9); } 50% { transform: translateY(-26px) scale(.95,1.05); } }
+        .eg { display: block; margin: 0 auto; transform-origin: 50% 100%; animation: eh .8s ease-in-out infinite; }
+        #q-char { padding-top: 30px; } #my-char { padding-top: 8px; }
+        .modes { display: flex; gap: 6px; justify-content: center; margin: 0 0 10px; }
+        .modes button { width: auto; margin: 0; padding: 6px 14px; font-size: 0.85rem; }
+        @media (prefers-reduced-motion: reduce) { .eg { animation: none; } }
     </style>
 </head>
 <body>
@@ -172,14 +178,30 @@
         <button class="btn-secondary" onclick="answerQuestion(false)">いいえ（当てはまらない） ▶</button>
     </div>
 
+    <!-- 画面2.5: 孵化前のプロフィール（すべて任意） -->
+    <div id="screen-profile" class="screen">
+        <h3>🥚 もうすぐ孵化します</h3>
+        <p class="note">答えるほど、見た目と称号が細かくなります。どれも「答えたくない」でOK。入力した内容はこの端末の中だけで使われ、送信も保存もされません。</p>
+        <label>生まれ年（干支）:</label><select id="p-year"></select>
+        <label>誕生月日（星座）:</label><select id="p-month"></select><select id="p-day"></select>
+        <label>血液型:</label>
+        <select id="p-blood"><option value="">答えたくない</option><option>A</option><option>B</option><option>O</option><option>AB</option></select>
+        <label>性別:</label>
+        <select id="p-gender"><option value="">答えたくない</option><option value="m">男性</option><option value="f">女性</option><option value="n">どちらでもない</option></select>
+        <button onclick="hatch()">🥚 孵化させる</button>
+    </div>
+
     <!-- 画面3: 自分の診断結果表示 -->
     <div id="screen-my-result" class="screen">
         <h3>🎉 あなたの判定職種</h3>
         <div id="hatch-stage" class="stage" style="background:#f1dfc0"><div id="my-char"></div><div class="ground"></div></div>
+        <div class="modes"><button class="btn-secondary" onclick="setMode('idle')">待機</button><button class="btn-secondary" onclick="setMode('walk')">歩く</button><button class="btn-secondary" onclick="setMode('run')">走る</button></div>
         <div class="result-box">
+            <p><strong>称号:</strong> <span id="my-title" style="font-weight: bold;"></span></p>
             <p><strong>タイプ:</strong> <span id="my-type-code" class="my-type-badge"></span></p>
             <p><strong>ギルド職種:</strong> <span id="my-class-name" style="font-size: 1.2rem; font-weight: bold;"></span></p>
             <p><strong>特徴:</strong> <span id="my-catch"></span></p>
+            <p><strong>星座・属性:</strong> <span id="my-extra"></span></p>
         </div>
         <button onclick="goToCompatWithMyType()">🤝 他のキャラとのブラック相性を測る</button>
         <button class="btn-secondary" onclick="showScreen('screen-menu')">トップに戻る</button>
@@ -288,12 +310,14 @@
     window.onload = async () => {
         initSelectOptions();
         initSituationOptions();
+        initProfile();
         await loadMasterData();      // 成功すればシートの内容で上書き、失敗してもそのまま動く
         initSelectOptions();
         initSituationOptions();
     };
 
     function showScreen(screenId) {
+        if (screenId !== 'screen-my-result' && typeof heroTimer !== 'undefined') clearInterval(heroTimer);
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
         document.getElementById(screenId).classList.add('active');
     }
@@ -395,44 +419,118 @@
         showScreen('screen-quiz');
     }
 
-    // ---------- ドット絵キャラ（4軸×2択＝8パーツを重ねて16タイプを表現） ----------
-    const PIX_BODY = ["....oooooooo....","...obbbbbbbbo...","..obbbbbbbbbbo..",".obbbbbbbbbbbbo.",".obbbbbbbbbbbbo.",".obbbbbbbbbbbbo.",".obbbbbbbbbbbbo.",".obbbbbbbbbbbbo.","..obbbbbbbbbbo..","...oobbbbbboo...","....oooooooo...."];
+    // ---------- 卵・孵化・人型ドット絵 ----------
+    const EGG_MAP = ["....oooo....","..oowwwwoo..",".owwwwwwwwo.",".owwwssswwo.","owwwwwwwwwwo","owwsswwwwwwo","owwwwwwwswwo","owwwwwwwwwwo","owwwwsswwwwo",".owwwwwwwwo.",".owwwwwwwwo.","..oowwwwoo..","....oooo...."];
+    function eggSvg() {
+        const C = { o: "#2f2540", w: "#fff4dc", s: "#f2b8a0" };
+        let o = "";
+        EGG_MAP.forEach((r, i) => { for (let j = 0; j < 12; j++) if (r[j] !== ".") o += `<rect x="${j * 13}" y="${i * 13}" width="13" height="13" fill="${C[r[j]]}"/>`; });
+        return `<svg class="eg" width="130" viewBox="0 0 156 169" shape-rendering="crispEdges" role="img" aria-label="跳ねる卵">${o}</svg>`;
+    }
     const AREAS = {
         EI: { name: "酒場の広場", bg: "#f1dfc0" }, SN: { name: "ざわめく森", bg: "#cfe8c8" },
         TF: { name: "魔導の鍛冶場", bg: "#ddd6ee" }, JP: { name: "星見の丘", bg: "#c9d6ee" }
     };
+    // 星座（12）・属性・干支（12）
+    const SIGNS = [["牡羊座","♈︎","fire"],["牡牛座","♉︎","earth"],["双子座","♊︎","wind"],["蟹座","♋︎","water"],["獅子座","♌︎","fire"],["乙女座","♍︎","earth"],["天秤座","♎︎","wind"],["蠍座","♏︎","water"],["射手座","♐︎","fire"],["山羊座","♑︎","earth"],["水瓶座","♒︎","wind"],["魚座","♓︎","water"]];
+    const SIGN_IDX = [9,10,11,0,1,2,3,4,5,6,7,8,9], SIGN_CUT = [20,19,21,20,21,22,23,23,23,24,23,22];
+    function signOf(m, d) { return SIGNS[SIGN_IDX[d >= SIGN_CUT[m - 1] ? m : m - 1]]; }
+    const AUR = { fire: ["炎","#ff8a4a"], earth: ["大地","#7fbf5a"], wind: ["風","#6fc8e0"], water: ["水","#4f8ef0"], light: ["光","#f2c230"], dark: ["闇","#9b6bd8"] };
+    const LIGHT_TYPES = ["ENFJ","ENFP","INFP","ESFJ","ISFJ","ESFP","ENTP","ESTP"];   // 星座を答えない人は、タイプで光/闇が決まる
+    const ETO_ORDER = ["申","酉","戌","亥","子","丑","寅","卯","辰","巳","午","未"];
+    // [耳の種類, 耳色, 耳の内側色, しっぽの種類, しっぽ色, 呼び名]
+    const ETO = {
+        "子":["rd","#b8b0a8","#ffb0c0","cat","#b8b0a8","ねずみ耳"], "丑":["hn","#e8d9a8","","dog","#7a5a44","牛の角"],
+        "寅":["pt","#f0a050","#ffb0c0","cat","#f0a050","トラ耳"], "卯":["lg","#ffffff","#ffb0c0","puff","#ffffff","うさぎ耳"],
+        "辰":["hn","#e8d9a8","","dra","#6fbf73","竜の角"], "巳":["","","","dra","#7fcf6a","蛇のしっぽ"],
+        "午":["pt","#9a6a44","#ffb0c0","dog","#9a6a44","馬の耳"], "未":["fl","#f4f0e6","","puff","#f4f0e6","羊の耳"],
+        "申":["rd","#a8784c","#ffd9b8","cat","#a8784c","サル耳"], "酉":["cb","","","cat","#e0803a","とさか"],
+        "戌":["fl","#8a5a3c","","dog","#b98a5a","犬耳"], "亥":["rd","#b07a5a","#ffb0c0","puff","#f0a8b8","イノシシ耳"]
+    };
 
-    function pixSvg(s, cls) {
-        const any = s.EI || s.SN || s.TF || s.JP;
-        const body = s.EI === "E" ? "#ffb27a" : s.EI === "I" ? "#a9b6ff" : "#f6f0e6";
-        const P = { o:"#3a2d4f", b:body, k:"#2b2233", p:"#ff8fa3", w:"#ffffff", y:"#ffd34e", r:"#8a5a3c", u:"#5aa7ff", h:"#6b4fd8", f:"#f28cab", e:"#f0507a", x:"#ff6b4a", a:"#cfe3ff" };
-        const g = {};
-        const put = (r, c, ch) => { g[r + "," + c] = P[ch]; };
-        const ov = (r0, c0, rows) => rows.forEach((row, i) => { for (let j = 0; j < row.length; j++) if (row[j] !== ".") put(r0 + i, c0 + j, row[j]); });
-        ov(4, 0, PIX_BODY);
-        if (s.TF === "F") { for (let r = 8; r <= 13; r++) { put(r, 0, "f"); put(r, 15, "f"); } ov(0, 12, ["ee.ee","eeeee",".eee."]); }
-        if (s.SN === "N") { ov(6, -1, ["aa","aa",".a"]); ov(6, 15, ["aa","aa","a."]); ov(3, -2, [".y.","yyy",".y."]); }
-        if (any) { put(8,4,"k"); put(9,4,"k"); put(8,11,"k"); put(9,11,"k"); } else { put(9,3,"k"); put(9,4,"k"); put(9,11,"k"); put(9,12,"k"); }
-        put(10,2,"p"); put(10,13,"p"); if (s.TF === "F") { put(11,2,"p"); put(11,13,"p"); }
-        if (s.EI === "E") { ov(10,6,["kkkk"]); ov(11,7,["xx"]); ov(1,1,[".y.","yyy",".y."]); } else { ov(10,7,["kk"]); }
-        if (s.EI === "I") ov(11, 11, ["rrrr","rwwr","rrrr"]);
-        if (s.SN === "S") { for (let c = 3; c <= 12; c++) put(12, c, "r"); put(12,7,"y"); put(12,8,"y"); ov(15,3,["rrr","rrr"]); ov(15,10,["rrr","rrr"]); }
-        if (s.TF === "T") { ov(7,3,["uuu","uku","uku","uuu"]); ov(7,10,["uuu","uku","uku","uuu"]); ov(8,6,["uuuu"]); for (let q = 8; q <= 15; q++) put(q,16,"r"); ov(5,15,[".u.","uuu",".u."]); }
-        if (s.JP === "J") { ov(0,7,["hh"]); ov(1,6,["hhhh"]); ov(2,5,["yyyyyy"]); ov(3,3,["hhhhhhhhhh"]); }
-        if (s.JP === "P") { put(3,7,"o"); put(2,7,"o"); put(1,8,"o"); put(1,9,"o"); put(0,9,"y"); put(0,10,"y"); }
-        let rects = "";
-        for (const k in g) { const a = k.split(","); rects += `<rect x="${(+a[1] + 2) * 12}" y="${+a[0] * 12}" width="12" height="12" fill="${g[k]}"/>`; }
-        return `<svg class="${cls || ""}" viewBox="0 0 240 204" shape-rendering="crispEdges" role="img" aria-label="ドット絵のキャラクター">${rects}</svg>`;
+    function heroSvg(c, t, mode, first) {
+        const s = { EI: c.t[0], SN: c.t[1], TF: c.t[2], JP: c.t[3] }, z = c.eto, M = [], L = [], A = [];
+        const OL = "#2f2540", SK = "#ffd9b8", HC = "#4a3326", p = t % 4, run = mode === "run", idle = mode === "idle";
+        const R = (a, x, y, w, h, col) => a.push(`<rect x="${x * 5}" y="${y * 5}" width="${w * 5}" height="${h * 5}" fill="${col}"/>`);
+        const dy = idle ? (t % 8 < 4 ? 0 : 1) : (run ? (p % 2 ? -1 : 0) : (p % 2 ? 0 : 1));
+        const tun = s.EI === "E" ? "#f2994a" : "#6c7bd9", tun2 = s.EI === "E" ? "#c77626" : "#4c59ad";
+        [[3,6],[27,10],[1,26],[28,32],[5,40],[26,2]].forEach((q, i) => { if ((t + i) % 3) R(A, q[0], q[1], 2, 2, c.aura); });
+        R(L, 9, 41, 14, 1, "#0000001f");
+        let lh = 7, rh = 7, lx = 12, rx = 17;
+        if (mode === "walk") { if (p === 1) lh = 5; if (p === 3) rh = 5; }
+        if (run) { lx = 10; rx = 19; if (p % 2) lh = 6; else rh = 6; }
+        R(L, lx, 33, 3, lh, "#3a3552"); R(L, rx, 33, 3, rh, "#3a3552");
+        if (s.SN === "S") { R(L, lx, 31 + lh, 3, 2, "#8a5a3c"); R(L, rx, 31 + rh, 3, 2, "#8a5a3c"); } else { R(L, lx, 32 + lh, 3, 1, SK); R(L, rx, 32 + rh, 3, 1, SK); }
+        if (s.SN === "N") { const w = "#b8d0ff"; R(M,5,21,5,3,w); R(M,2,23,6,4,w); R(M,3,27,4,2,w); R(M,22,21,5,3,w); R(M,24,23,6,4,w); R(M,25,27,4,2,w); }
+        if (s.TF === "F") R(M, 8, 24, 16, 12, "#f28cab");
+        const tw = (t % 4 < 2) ? 0 : -1;
+        if (z) {
+            const tc = z[4];
+            if (z[3] === "cat") { R(M,22,30+tw,2,2,tc); R(M,24,28+tw,2,3,tc); R(M,25,26+tw,2,3,tc); }
+            if (z[3] === "dog") { R(M,22,30,3,2,tc); R(M,24,28+tw,2,3,tc); }
+            if (z[3] === "puff") R(M,21,31,3,3,tc);
+            if (z[3] === "dra") { R(M,22,33,5,2,tc); R(M,27,32+tw,2,2,tc); }
+        }
+        if (c.gender === "f") R(M, 9, 15, 14, 17, HC);
+        R(M, 10, 23, 12, 11, OL); R(M, 11, 24, 10, 9, tun); R(M, 11, 31, 10, 2, tun2);
+        R(M, 15, 26, 2, 2, c.aura);
+        let aL = 0, aR = 0; if (mode === "walk") { aL = p === 1 ? 1 : p === 3 ? -1 : 0; aR = -aL; } if (run) { aL = p % 2 ? -2 : 2; aR = -aL; }
+        R(M, 9, 25 + aL, 2, 7, tun); R(M, 9, 32 + aL, 2, 2, SK); R(M, 21, 25 + aR, 2, 7, tun); R(M, 21, 32 + aR, 2, 2, SK);
+        if (c.blood) R(M, 12, 23, 8, 2, { A: "#4fa3e0", B: "#e0574f", O: "#e8c14a", AB: "#8f5bd6" }[c.blood]);
+        if (s.SN === "S") { R(M, 11, 29, 10, 1, "#8a5a3c"); R(M, 15, 29, 2, 1, "#ffd34e"); }
+        R(M, 9, 11, 14, 13, OL); R(M, 10, 12, 12, 11, SK);
+        if (z && z[0]) {
+            const k = z[0], e1 = z[1], e2 = z[2];
+            if (k === "pt") { [[10,9,5],[10,8,4],[10,7,3],[10,6,2],[17,9,5],[18,8,4],[19,7,3],[20,6,2]].forEach(a => R(M, a[0], a[1], a[2], 1, e1)); R(M,11,8,1,1,e2); R(M,20,8,1,1,e2); }
+            if (k === "lg") { R(M,11,1,3,10,e1); R(M,18,1,3,10,e1); R(M,12,3,1,7,e2); R(M,19,3,1,7,e2); }
+            if (k === "fl") { R(M,7,12,3,8,e1); R(M,22,12,3,8,e1); }
+            if (k === "hn") { R(M,10,7,2,4,e1); R(M,20,7,2,4,e1); R(M,10,6,1,1,e1); R(M,21,6,1,1,e1); }
+            if (k === "rd") { R(M,8,10,3,3,e1); R(M,21,10,3,3,e1); R(M,9,11,1,1,e2); R(M,22,11,1,1,e2); }
+            if (k === "cb") { R(M,14,6,4,3,"#e0403a"); R(M,15,5,2,1,"#e0403a"); }
+        }
+        R(M, 10, 9, 12, 1, OL); R(M, 9, 10, 14, 5, HC);
+        const sh = c.gender === "f" ? 6 : c.gender === "n" ? 8 : c.gender === "m" ? 3 : 4;
+        R(M,9,15,2,sh,HC); R(M,21,15,2,sh,HC); R(M,11,15,4,2,HC); R(M,17,15,4,2,HC);
+        if (t % 20 === 0 && !idle || t % 24 === 0) { R(M,12,19,2,1,OL); R(M,18,19,2,1,OL); } else { R(M,12,17,2,3,OL); R(M,18,17,2,3,OL); R(M,12,17,1,1,"#fff"); R(M,18,17,1,1,"#fff"); }
+        const ck = c.gender === "f" ? "#ff8fa3" : "#ffa6a6"; R(M,11,20,2,1,ck); R(M,19,20,2,1,ck);
+        if (s.EI === "E") R(M,15,21,2,2,"#7a2a3a"); else R(M,15,21,2,1,OL);
+        if (s.TF === "T") { const g = "#3b6fd8"; R(M,11,16,4,1,g); R(M,11,20,4,1,g); R(M,11,16,1,5,g); R(M,14,16,1,5,g); R(M,17,16,4,1,g); R(M,17,20,4,1,g); R(M,17,16,1,5,g); R(M,20,16,1,5,g); R(M,15,17,2,1,g); R(M,23,20,1,20,"#8a5a3c"); R(M,22,16,3,4,"#5aa7ff"); }
+        if (s.TF === "F") { const hc = "#f0507a"; R(M,24,6,2,1,hc); R(M,27,6,2,1,hc); R(M,24,7,5,1,hc); R(M,25,8,3,1,hc); R(M,26,9,1,1,hc); }
+        if (s.JP === "J") { const hp = "#6b4fd8"; R(M,15,2,2,2,hp); R(M,13,4,6,2,hp); R(M,12,6,8,2,hp); R(M,11,8,10,1,"#ffd34e"); R(M,8,9,16,2,"#523ac0"); }
+        if (s.JP === "P") { R(M,16,5,1,5,OL); R(M,17,4,1,1,OL); R(M,18,3,2,2,"#ffd34e"); }
+        return `<svg class="${first ? "pop" : ""}" width="160" viewBox="0 0 160 220" shape-rendering="crispEdges" role="img" aria-label="孵化したキャラクター">${A.join("")}${L.join("")}<g transform="translate(0,${dy * 5})">${M.join("")}</g></svg>`;
     }
 
-    // 今までの回答から「いま獲得しているパーツ」を求める
-    function currentParts() {
-        const s = {};
-        AXIS_GROUPS.forEach(g => {
-            const a = scores[g[0]] || 0, b = scores[g[1]] || 0;
-            s[g] = a + b === 0 ? null : (a === b ? (lastPick[g] || null) : (a > b ? g[0] : g[1]));
-        });
-        return s;
+    // ---------- 孵化（プロフィール入力 → 結果） ----------
+    let heroTimer = null, heroT = 0, heroMode = "walk", heroCfg = null;
+    function heroDraw(first) { document.getElementById('my-char').innerHTML = heroSvg(heroCfg, heroT, heroMode, first); }
+    function setMode(m) { heroMode = m; }
+    function startHero() {
+        clearInterval(heroTimer); heroT = 0; heroDraw(true);
+        if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+        heroTimer = setInterval(() => { heroT++; heroDraw(false); }, 140);
+    }
+    function initProfile() {
+        const fill = (id, opts) => { const sel = document.getElementById(id); sel.innerHTML = ""; opts.forEach(o => { const e = document.createElement("option"); e.value = o[0]; e.textContent = o[1]; sel.appendChild(e); }); };
+        const ys = [["", "答えたくない"]]; for (let y = new Date().getFullYear(); y >= 1920; y--) ys.push([y, y + "年"]);
+        const ms = [["", "答えたくない"]]; for (let m = 1; m <= 12; m++) ms.push([m, m + "月"]);
+        const ds = [["", "答えたくない"]]; for (let d = 1; d <= 31; d++) ds.push([d, d + "日"]);
+        fill("p-year", ys); fill("p-month", ms); fill("p-day", ds);
+    }
+    function hatch() {
+        const v = id => document.getElementById(id).value;
+        const y = +v("p-year"), m = +v("p-month");
+        const d = m ? Math.min(+v("p-day"), new Date(2000, m, 0).getDate()) : 0;
+        const t = myCalculatedType;
+        const sg = (m && d) ? signOf(m, d) : null;
+        const eto = y ? ETO_ORDER[y % 12] : null;
+        const au = AUR[sg ? sg[2] : (LIGHT_TYPES.includes(t) ? "light" : "dark")];
+        heroCfg = { t, blood: v("p-blood"), gender: v("p-gender"), aura: au[1], eto: eto ? ETO[eto] : null };
+        const cn = (characters[t] || { name: "" }).name;
+        document.getElementById('my-title').innerText = `${au[0]}をまとう ${eto ? ETO[eto][5] + "の " : ""}${cn}`;
+        document.getElementById('my-extra').innerText = `${sg ? sg[1] + " " + sg[0] : "星座は秘密"}／${au[0]}属性${eto ? "／" + eto + "年" : ""}`;
+        showScreen('screen-my-result');
+        startHero();
     }
 
     let hopNext = "";
@@ -443,7 +541,7 @@
         document.getElementById('q-text').innerText = q.text;
         document.getElementById('q-area').innerText = AREAS[group].name;
         document.getElementById('stage').style.background = AREAS[group].bg;
-        document.getElementById('q-char').innerHTML = pixSvg(currentParts(), hopNext);
+        document.getElementById('q-char').innerHTML = `<div class="${hopNext}">${eggSvg()}</div>`;
         document.getElementById('q-track').innerHTML = questions.map((_, i) => `<i class="${i < currentQIndex ? "d" : i === currentQIndex ? "c" : ""}"></i>`).join("");
         hopNext = "";
     }
@@ -477,9 +575,7 @@
         document.getElementById('my-class-name').innerText = charInfo.name;
         document.getElementById('my-catch').innerText = charInfo.catch;
 
-        const t = myCalculatedType;
-        document.getElementById('my-char').innerHTML = pixSvg({ EI: t[0], SN: t[1], TF: t[2], JP: t[3] }, "pop");
-        showScreen('screen-my-result');
+        showScreen('screen-profile');
     }
 
     function goToCompatWithMyType() {
