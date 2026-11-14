@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>異世界ギルドのブラック相性＆職種診断</title>
+    <title>TALK BURST｜異世界ギルドのブラック相性＆職種診断</title>
     <style>
         :root {
             --bg-color: #1a1a24;
@@ -61,6 +61,19 @@
         }
         button:hover {
             background-color: var(--accent-hover);
+        }
+        button:disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+        }
+        button:focus-visible, select:focus-visible {
+            outline: 2px solid var(--text-main);
+            outline-offset: 2px;
+        }
+        .note {
+            font-size: 0.8rem;
+            color: var(--text-sub);
+            margin: 8px 0 0 0;
         }
         .btn-secondary {
             background-color: #4b5563;
@@ -164,7 +177,10 @@
         <label>キャラクター B のタイプ:</label>
         <select id="typeB"></select>
 
-        <button onclick="fetchCompatibility()">ブラック査定を実行する</button>
+        <label>シチュエーション:</label>
+        <select id="situation"></select>
+
+        <button id="btn-compat" onclick="fetchCompatibility()">ブラック査定を実行する</button>
         <button class="btn-secondary" onclick="showScreen('screen-menu')">戻る</button>
     </div>
 
@@ -173,14 +189,16 @@
         <h3>📊 査定結果レポート</h3>
         <div class="result-box">
             <p><strong>ペア:</strong> <span id="res-pair"></span></p>
+            <p><strong>シチュエーション:</strong> <span id="res-situation"></span></p>
             <p><strong>限界会話時間:</strong> <span id="res-time" style="color: var(--danger-color); font-weight: bold;"></span></p>
             <p><strong>ブラック解説:</strong><br><span id="res-comment" style="line-height: 1.6;"></span></p>
+            <p id="res-note" class="note"></p>
         </div>
 
         <div class="ad-banner">
             <p style="font-size: 0.85rem; color: var(--text-sub); margin: 0 0 10px 0;">🎁 広告を見て耐性を強化しますか？</p>
             <p style="font-size: 0.9rem; margin: 0 0 10px 0;"><strong id="res-item"></strong></p>
-            <button style="background: #059669; margin-top: 0;" onclick="watchAd()">【動画広告】ポーションを服用する (+30分延長)</button>
+            <button id="btn-ad" style="background: #059669; margin-top: 0;" onclick="watchAd()">【動画広告】ポーションを服用する (+30分延長)</button>
         </div>
 
         <button style="margin-top: 20px;" onclick="showScreen('screen-compat')">別のペアを査定する</button>
@@ -188,11 +206,13 @@
 </div>
 
 <script>
-    // ★GASのウェブアプリURLをここに設定
+    // ★GASのウェブアプリURL
     const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyw59yeryhjg6oir3i5jRvdxX1uze8B-SLpwXNe_mkBFdK5x9Zj9mJNKdFtwkw0qZAc/exec";
+    const FETCH_TIMEOUT_MS = 10000;
+    const AD_BONUS_MINUTES = 30;
 
-    // 16タイプのフォールバック用マスターデータ
-    const CHARACTERS_MASTER = {
+    // ---------- フォールバック用マスターデータ（GAS取得失敗時もこれで動く） ----------
+    const DEFAULT_CHARACTERS = {
         "INTJ": { name: "魔導戦略士", catch: "論理・計画・洞察" },
         "INTP": { name: "理論魔導士", catch: "分析・探究・抽象思考" },
         "ENTJ": { name: "ギルド統率者", catch: "決断・統率・効率" },
@@ -211,29 +231,49 @@
         "ESFP": { name: "吟遊詩人", catch: "明るさ・柔軟・社交" }
     };
 
-    // 12問の質問データ (E/I, S/N, T/F, J/Pの4軸に対応)
-    const QUESTIONS = [
-        { text: "パーティーの宴会では自分から積極的に話しかけるほうだ", axis: "EI" },
-        { text: "大勢で過ごすより、一人の時間でエネルギーを充電したい", axis: "IE" },
-        { text: "初対面の相手ともすぐに会話を盛り上げることができる", axis: "EI" },
-        { text: "具体的な事実や目の前のデータを何よりも信用する", axis: "SN" },
-        { text: "未来の可能性や抽象的なアイデアを考えるのが好きだ", axis: "NS" },
-        { text: "現実的な手順よりも、全体のコンセプトや意味を重視する", axis: "NS" },
-        { text: "感情や人間関係よりも、客観的な論理と法則で決断する", axis: "TF" },
-        { text: "他人の気持ちに共感し、調和を保つことが何より大切だ", axis: "FT" },
-        { text: "問題が起きた時、情を挟まずに事実に基づいた効率的解決を選ぶ", axis: "TF" },
-        { text: "旅の計画はあらかじめきっちり立てて行動したい", axis: "JP" },
-        { text: "状況に応じて臨機応変に柔軟な対応をする方が得意だ", axis: "PJ" },
-        { text: "締め切りや約束事は必ず厳守する計画派だ", axis: "JP" }
+    // pos = 「はい」で加点される側 / neg = 「いいえ」で加点される側（シートの weight_positive / weight_negative と同じ意味）
+    const DEFAULT_QUESTIONS = [
+        { text: "パーティーの宴会では自分から積極的に話しかけるほうだ", pos: "E", neg: "I" },
+        { text: "大勢で過ごすより、一人の時間でエネルギーを充電したい", pos: "I", neg: "E" },
+        { text: "初対面の相手ともすぐに会話を盛り上げることができる", pos: "E", neg: "I" },
+        { text: "具体的な事実や目の前のデータを何よりも信用する", pos: "S", neg: "N" },
+        { text: "未来の可能性や抽象的なアイデアを考えるのが好きだ", pos: "N", neg: "S" },
+        { text: "現実的な手順よりも、全体のコンセプトや意味を重視する", pos: "N", neg: "S" },
+        { text: "感情や人間関係よりも、客観的な論理と法則で決断する", pos: "T", neg: "F" },
+        { text: "他人の気持ちに共感し、調和を保つことが何より大切だ", pos: "F", neg: "T" },
+        { text: "問題が起きた時、情を挟まずに事実に基づいた効率的解決を選ぶ", pos: "T", neg: "F" },
+        { text: "旅の計画はあらかじめきっちり立てて行動したい", pos: "J", neg: "P" },
+        { text: "状況に応じて臨機応変に柔軟な対応をする方が得意だ", pos: "P", neg: "J" },
+        { text: "締め切りや約束事は必ず厳守する計画派だ", pos: "J", neg: "P" }
     ];
 
-    let currentQIndex = 0;
-    let scores = { E: 0, I: 0, S: 0, N: 0, T: 0, F: 0, J: 0, P: 0 };
-    let myCalculatedType = "INTJ";
+    const DEFAULT_SITUATIONS = [
+        { id: "1", name: "通常の酒場での雑談", locked: false },
+        { id: "2", name: "修羅場のデスマーチ炎上編", locked: true }
+    ];
 
-    // 画面初期化
-    window.onload = () => {
+    const AXIS_GROUPS = ["EI", "SN", "TF", "JP"];
+
+    // ---------- 状態 ----------
+    let characters = JSON.parse(JSON.stringify(DEFAULT_CHARACTERS));
+    let questions = DEFAULT_QUESTIONS.slice();
+    let situations = DEFAULT_SITUATIONS.slice();
+    const unlockedSituations = new Set();
+
+    let currentQIndex = 0;
+    let scores = {};
+    let lastPick = {};
+    let myCalculatedType = "INTJ";
+    let currentLimit = 0;
+    let adUsed = false;
+
+    // ---------- 起動 ----------
+    window.onload = async () => {
         initSelectOptions();
+        initSituationOptions();
+        await loadMasterData();      // 成功すればシートの内容で上書き、失敗してもそのまま動く
+        initSelectOptions();
+        initSituationOptions();
     };
 
     function showScreen(screenId) {
@@ -241,63 +281,131 @@
         document.getElementById(screenId).classList.add('active');
     }
 
+    // ---------- GAS通信 ----------
+    async function gasFetch(params) {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+        try {
+            const res = await fetch(GAS_API_URL + "?" + new URLSearchParams(params), { signal: ctrl.signal });
+            if (!res.ok) throw new Error("HTTP " + res.status);
+            return await res.json();
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+
+    async function loadMasterData() {
+        try {
+            const d = await gasFetch({ action: "getBootstrap" });
+            if (!d || d.status === "error") throw new Error(d && d.message || "bootstrap failed");
+            applyMasterData(d);
+        } catch (e) {
+            console.warn("マスターデータ取得失敗。内蔵データで動作します:", e);
+        }
+    }
+
+    // シートの内容を検証してから採用（不完全なら内蔵データを維持）
+    function applyMasterData(d) {
+        if (Array.isArray(d.characters)) {
+            d.characters.forEach(r => {
+                const code = String(r.mbti_type || "").trim().toUpperCase();
+                if (characters[code] && r.class_name) {
+                    characters[code] = {
+                        name: String(r.class_name),
+                        catch: r.catch_phrase ? String(r.catch_phrase) : characters[code].catch
+                    };
+                }
+            });
+        }
+        if (Array.isArray(d.questions)) {
+            const valid = d.questions
+                .filter(r => r.question_text && r.weight_positive && r.weight_negative)
+                .map(r => ({ text: String(r.question_text), pos: String(r.weight_positive).trim().toUpperCase(), neg: String(r.weight_negative).trim().toUpperCase() }));
+            // 4軸すべてに2問以上あるときだけ採用
+            const ok = AXIS_GROUPS.every(g => valid.filter(q => g.includes(q.pos)).length >= 2);
+            if (ok) questions = valid;
+        }
+        if (Array.isArray(d.situations)) {
+            const valid = d.situations
+                .filter(r => r.situation_id !== "" && r.situation_name)
+                .map(r => ({ id: String(r.situation_id), name: String(r.situation_name), locked: String(r.is_locked_by_ad).toUpperCase() === "TRUE" }));
+            if (valid.length > 0) situations = valid;
+        }
+    }
+
+    // ---------- セレクト初期化（textContentで安全に生成） ----------
     function initSelectOptions() {
         const selectA = document.getElementById('typeA');
         const selectB = document.getElementById('typeB');
+        const keepA = selectA.value, keepB = selectB.value;
         selectA.innerHTML = '';
         selectB.innerHTML = '';
 
-        for (let code in CHARACTERS_MASTER) {
-            let optionStr = `<option value="${code}">${code}（${CHARACTERS_MASTER[code].name}）</option>`;
-            selectA.innerHTML += optionStr;
-            selectB.innerHTML += optionStr;
+        for (const code in characters) {
+            const label = `${code}（${characters[code].name}）`;
+            [selectA, selectB].forEach(sel => {
+                const o = document.createElement('option');
+                o.value = code;
+                o.textContent = label;
+                sel.appendChild(o);
+            });
         }
-        selectB.selectedIndex = 1;
+        selectA.value = keepA || "INTJ";
+        selectB.value = keepB || "ENFP";
     }
 
-    // 診断開始
+    function initSituationOptions() {
+        const sel = document.getElementById('situation');
+        const keep = sel.value;
+        sel.innerHTML = '';
+        situations.forEach(s => {
+            const o = document.createElement('option');
+            o.value = s.id;
+            const locked = s.locked && !unlockedSituations.has(s.id);
+            o.textContent = (locked ? "🔒 " : "") + s.name;
+            sel.appendChild(o);
+        });
+        if (keep && situations.some(s => s.id === keep)) sel.value = keep;
+    }
+
+    // ---------- 診断 ----------
     function startDiagnosis() {
         currentQIndex = 0;
-        scores = { E: 0, I: 0, S: 0, N: 0, T: 0, F: 0, J: 0, P: 0 };
+        scores = {};
+        lastPick = {};
         renderQuestion();
         showScreen('screen-quiz');
     }
 
     function renderQuestion() {
-        const q = QUESTIONS[currentQIndex];
-        document.getElementById('q-progress').innerText = `質問 ${currentQIndex + 1} / ${QUESTIONS.length}`;
+        const q = questions[currentQIndex];
+        document.getElementById('q-progress').innerText = `質問 ${currentQIndex + 1} / ${questions.length}`;
         document.getElementById('q-text').innerText = q.text;
     }
 
-    // 回答処理とスコアリングロジック
     function answerQuestion(isYes) {
-        const q = QUESTIONS[currentQIndex];
-        const primary = q.axis[0];
-        const secondary = q.axis[1];
-
-        if (isYes) {
-            scores[primary] += 1;
-        } else {
-            scores[secondary] += 1;
-        }
+        const q = questions[currentQIndex];
+        const picked = isYes ? q.pos : q.neg;
+        scores[picked] = (scores[picked] || 0) + 1;
+        const group = AXIS_GROUPS.find(g => g.includes(q.pos));
+        lastPick[group] = picked;          // 同点のとき「最後に選んだ側」を採用
 
         currentQIndex++;
-        if (currentQIndex < QUESTIONS.length) {
+        if (currentQIndex < questions.length) {
             renderQuestion();
         } else {
             calculateTypeResult();
         }
     }
 
-    // 4軸判定からMBTIタイプ生成
     function calculateTypeResult() {
-        const e_i = scores.E >= scores.I ? "E" : "I";
-        const s_n = scores.S >= scores.N ? "S" : "N";
-        const t_f = scores.T >= scores.F ? "T" : "F";
-        const j_p = scores.J >= scores.P ? "J" : "P";
-
-        myCalculatedType = `${e_i}${s_n}${t_f}${j_p}`;
-        const charInfo = CHARACTERS_MASTER[myCalculatedType] || CHARACTERS_MASTER["INTJ"];
+        // 各軸: 得点が多い方。同点なら最後に選んだ方（常に同じ側に偏らない）
+        const pick = g => {
+            const a = scores[g[0]] || 0, b = scores[g[1]] || 0;
+            return a === b ? (lastPick[g] || g[0]) : (a > b ? g[0] : g[1]);
+        };
+        myCalculatedType = AXIS_GROUPS.map(pick).join("");
+        const charInfo = characters[myCalculatedType] || characters["INTJ"];
 
         document.getElementById('my-type-code').innerText = myCalculatedType;
         document.getElementById('my-class-name').innerText = charInfo.name;
@@ -311,37 +419,78 @@
         showScreen('screen-compat');
     }
 
-    // バックエンド（GAS）通信処理
+    // ---------- 相性査定 ----------
+    function localFallback(typeA, typeB, situationId) {
+        return {
+            type_a: typeA, type_b: typeB, situation_id: situationId,
+            limit_minutes: 15,
+            black_comment: "お互いに無関心すぎて、逆に永遠に会話が平行線をたどるミステリー空間。",
+            recovery_item: "観察眼の片眼鏡（動画視聴）",
+            is_fallback: true
+        };
+    }
+
     async function fetchCompatibility() {
         const typeA = document.getElementById('typeA').value;
         const typeB = document.getElementById('typeB').value;
+        const sitId = document.getElementById('situation').value;
+        const sit = situations.find(s => s.id === sitId) || situations[0];
 
-        // 同じタイプ同士の制限を撤廃、または以下のようにブラックなコメントを逆に表示させることも可能です
-        if (typeA === typeB) {
-            console.log("同族同士の鏡面合わせモード発動");
+        // 広告ロック中のシチュエーションは、広告視聴（デモ）で解放
+        if (sit.locked && !unlockedSituations.has(sit.id)) {
+            if (!confirm(`「${sit.name}」は広告視聴で解放されます。\n【デモ】15秒の動画広告を見ますか？`)) return;
+            unlockedSituations.add(sit.id);
+            initSituationOptions();
+            document.getElementById('situation').value = sit.id;
         }
 
-        const url = `${GAS_API_URL}?action=getCompatibility&typeA=${typeA}&typeB=${typeB}&situation=1`;
+        const btn = document.getElementById('btn-compat');
+        btn.disabled = true;
+        btn.innerText = "査定中…（初回は数秒かかります）";
 
+        let data, offline = false;
         try {
-            const response = await fetch(url);
-            const data = await response.json();
-
-            document.getElementById('res-pair').innerText = `${data.type_a} × ${data.type_b}`;
-            document.getElementById('res-time').innerText = `${data.limit_minutes} 分`;
-            document.getElementById('res-comment').innerText = data.black_comment;
-            document.getElementById('res-item').innerText = `特効薬: ${data.recovery_item}`;
-
-            showScreen('screen-result');
+            data = await gasFetch({ action: "getCompatibility", typeA, typeB, situation: sitId });
+            if (!data || data.status === "error") throw new Error(data && data.message || "compat failed");
         } catch (e) {
-            alert("通信エラーが発生しました。GASのURL設定またはデプロイ状況を確認してください。");
             console.error(e);
+            data = localFallback(typeA, typeB, sitId);
+            offline = true;
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "ブラック査定を実行する";
         }
+
+        currentLimit = Number(data.limit_minutes) || 15;
+        adUsed = false;
+
+        const nameA = characters[typeA] ? characters[typeA].name : "";
+        const nameB = characters[typeB] ? characters[typeB].name : "";
+        document.getElementById('res-pair').innerText = `${typeA}（${nameA}） × ${typeB}（${nameB}）`;
+        document.getElementById('res-situation').innerText = sit.name;
+        document.getElementById('res-time').innerText = `${currentLimit} 分`;
+        document.getElementById('res-comment').innerText = data.black_comment;
+        document.getElementById('res-item').innerText = `特効薬: ${data.recovery_item}`;
+        document.getElementById('res-note').innerText =
+            offline ? "※ 通信できなかったため暫定データで査定しました。"
+            : data.is_fallback ? "※ このペアは未登録のため暫定査定です。" : "";
+
+        const adBtn = document.getElementById('btn-ad');
+        adBtn.disabled = false;
+        adBtn.innerText = `【動画広告】ポーションを服用する (+${AD_BONUS_MINUTES}分延長)`;
+
+        showScreen('screen-result');
     }
 
     function watchAd() {
-        alert("【デモ】15秒の動画広告再生完了！ 会話時間が30分延長され、相手の脳内マニュアルが解放されました。");
-        document.getElementById('res-time').innerText = "45 分 (ポーション効果発動中)";
+        if (adUsed) return;
+        adUsed = true;
+        currentLimit += AD_BONUS_MINUTES;   // 元の時間に加算（固定の45分ではない）
+        alert(`【デモ】15秒の動画広告再生完了！ 会話時間が${AD_BONUS_MINUTES}分延長され、相手の脳内マニュアルが解放されました。`);
+        document.getElementById('res-time').innerText = `${currentLimit} 分 (ポーション効果発動中)`;
+        const adBtn = document.getElementById('btn-ad');
+        adBtn.disabled = true;
+        adBtn.innerText = "ポーション服用済み";
     }
 </script>
 
