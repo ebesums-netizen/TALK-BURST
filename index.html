@@ -132,6 +132,20 @@
             color: var(--accent-color);
             font-weight: bold;
         }
+
+        .stage { border-radius: 10px; padding-top: 10px; text-align: center; border: 3px solid #3a2d4f; margin-bottom: 10px; transition: background .4s; background: #f1dfc0; overflow: hidden; }
+        .stage .area { font-size: 0.8rem; font-weight: bold; color: #3a2d4f; }
+        .stage svg { display: block; margin: 0 auto; width: 170px; }
+        .stage .ground { height: 12px; background: #6b8f4e; border-top: 3px solid #3a2d4f; }
+        .track { display: flex; gap: 4px; justify-content: center; margin: 0 0 10px; }
+        .track i { width: 14px; height: 14px; background: #3a3a4e; border: 2px solid #555; display: block; }
+        .track i.d { background: var(--accent-color); border-color: #fff; }
+        .track i.c { background: #fff; border-color: var(--accent-color); }
+        @keyframes hopL { 40% { transform: translate(-28px,-14px); } }
+        @keyframes hopR { 40% { transform: translate(28px,-14px); } }
+        @keyframes pop { 0% { transform: scale(.85); } 60% { transform: scale(1.08); } 100% { transform: scale(1); } }
+        .hopL { animation: hopL .3s ease-out; } .hopR { animation: hopR .3s ease-out; } .pop { animation: pop .5s ease-out; }
+        @media (prefers-reduced-motion: reduce) { .hopL, .hopR, .pop { animation: none; } }
     </style>
 </head>
 <body>
@@ -148,17 +162,20 @@
 
     <!-- 画面2: 診断質問画面 -->
     <div id="screen-quiz" class="screen">
+        <div id="stage" class="stage"><div id="q-area" class="area"></div><div id="q-char"></div><div class="ground"></div></div>
+        <div id="q-track" class="track"></div>
         <div class="question-box">
             <div id="q-progress" class="q-progress">質問 1 / 12</div>
             <div id="q-text" class="q-text">ここに質問文が入ります</div>
         </div>
-        <button onclick="answerQuestion(true)">はい（当てはまる）</button>
-        <button class="btn-secondary" onclick="answerQuestion(false)">いいえ（当てはまらない）</button>
+        <button onclick="answerQuestion(true)">◀ はい（当てはまる）</button>
+        <button class="btn-secondary" onclick="answerQuestion(false)">いいえ（当てはまらない） ▶</button>
     </div>
 
     <!-- 画面3: 自分の診断結果表示 -->
     <div id="screen-my-result" class="screen">
         <h3>🎉 あなたの判定職種</h3>
+        <div id="hatch-stage" class="stage" style="background:#f1dfc0"><div id="my-char"></div><div class="ground"></div></div>
         <div class="result-box">
             <p><strong>タイプ:</strong> <span id="my-type-code" class="my-type-badge"></span></p>
             <p><strong>ギルド職種:</strong> <span id="my-class-name" style="font-size: 1.2rem; font-weight: bold;"></span></p>
@@ -371,16 +388,64 @@
     // ---------- 診断 ----------
     function startDiagnosis() {
         currentQIndex = 0;
+        hopNext = "";
         scores = {};
         lastPick = {};
         renderQuestion();
         showScreen('screen-quiz');
     }
 
+    // ---------- ドット絵キャラ（4軸×2択＝8パーツを重ねて16タイプを表現） ----------
+    const PIX_BODY = ["....oooooooo....","...obbbbbbbbo...","..obbbbbbbbbbo..",".obbbbbbbbbbbbo.",".obbbbbbbbbbbbo.",".obbbbbbbbbbbbo.",".obbbbbbbbbbbbo.",".obbbbbbbbbbbbo.","..obbbbbbbbbbo..","...oobbbbbboo...","....oooooooo...."];
+    const AREAS = {
+        EI: { name: "酒場の広場", bg: "#f1dfc0" }, SN: { name: "ざわめく森", bg: "#cfe8c8" },
+        TF: { name: "魔導の鍛冶場", bg: "#ddd6ee" }, JP: { name: "星見の丘", bg: "#c9d6ee" }
+    };
+
+    function pixSvg(s, cls) {
+        const any = s.EI || s.SN || s.TF || s.JP;
+        const body = s.EI === "E" ? "#ffb27a" : s.EI === "I" ? "#a9b6ff" : "#f6f0e6";
+        const P = { o:"#3a2d4f", b:body, k:"#2b2233", p:"#ff8fa3", w:"#ffffff", y:"#ffd34e", r:"#8a5a3c", u:"#5aa7ff", h:"#6b4fd8", f:"#f28cab", e:"#f0507a", x:"#ff6b4a", a:"#cfe3ff" };
+        const g = {};
+        const put = (r, c, ch) => { g[r + "," + c] = P[ch]; };
+        const ov = (r0, c0, rows) => rows.forEach((row, i) => { for (let j = 0; j < row.length; j++) if (row[j] !== ".") put(r0 + i, c0 + j, row[j]); });
+        ov(4, 0, PIX_BODY);
+        if (s.TF === "F") { for (let r = 8; r <= 13; r++) { put(r, 0, "f"); put(r, 15, "f"); } ov(0, 12, ["ee.ee","eeeee",".eee."]); }
+        if (s.SN === "N") { ov(6, -1, ["aa","aa",".a"]); ov(6, 15, ["aa","aa","a."]); ov(3, -2, [".y.","yyy",".y."]); }
+        if (any) { put(8,4,"k"); put(9,4,"k"); put(8,11,"k"); put(9,11,"k"); } else { put(9,3,"k"); put(9,4,"k"); put(9,11,"k"); put(9,12,"k"); }
+        put(10,2,"p"); put(10,13,"p"); if (s.TF === "F") { put(11,2,"p"); put(11,13,"p"); }
+        if (s.EI === "E") { ov(10,6,["kkkk"]); ov(11,7,["xx"]); ov(1,1,[".y.","yyy",".y."]); } else { ov(10,7,["kk"]); }
+        if (s.EI === "I") ov(11, 11, ["rrrr","rwwr","rrrr"]);
+        if (s.SN === "S") { for (let c = 3; c <= 12; c++) put(12, c, "r"); put(12,7,"y"); put(12,8,"y"); ov(15,3,["rrr","rrr"]); ov(15,10,["rrr","rrr"]); }
+        if (s.TF === "T") { ov(7,3,["uuu","uku","uku","uuu"]); ov(7,10,["uuu","uku","uku","uuu"]); ov(8,6,["uuuu"]); for (let q = 8; q <= 15; q++) put(q,16,"r"); ov(5,15,[".u.","uuu",".u."]); }
+        if (s.JP === "J") { ov(0,7,["hh"]); ov(1,6,["hhhh"]); ov(2,5,["yyyyyy"]); ov(3,3,["hhhhhhhhhh"]); }
+        if (s.JP === "P") { put(3,7,"o"); put(2,7,"o"); put(1,8,"o"); put(1,9,"o"); put(0,9,"y"); put(0,10,"y"); }
+        let rects = "";
+        for (const k in g) { const a = k.split(","); rects += `<rect x="${(+a[1] + 2) * 12}" y="${+a[0] * 12}" width="12" height="12" fill="${g[k]}"/>`; }
+        return `<svg class="${cls || ""}" viewBox="0 0 240 204" shape-rendering="crispEdges" role="img" aria-label="ドット絵のキャラクター">${rects}</svg>`;
+    }
+
+    // 今までの回答から「いま獲得しているパーツ」を求める
+    function currentParts() {
+        const s = {};
+        AXIS_GROUPS.forEach(g => {
+            const a = scores[g[0]] || 0, b = scores[g[1]] || 0;
+            s[g] = a + b === 0 ? null : (a === b ? (lastPick[g] || null) : (a > b ? g[0] : g[1]));
+        });
+        return s;
+    }
+
+    let hopNext = "";
     function renderQuestion() {
         const q = questions[currentQIndex];
+        const group = AXIS_GROUPS.find(g => g.includes(q.pos)) || "EI";
         document.getElementById('q-progress').innerText = `質問 ${currentQIndex + 1} / ${questions.length}`;
         document.getElementById('q-text').innerText = q.text;
+        document.getElementById('q-area').innerText = AREAS[group].name;
+        document.getElementById('stage').style.background = AREAS[group].bg;
+        document.getElementById('q-char').innerHTML = pixSvg(currentParts(), hopNext);
+        document.getElementById('q-track').innerHTML = questions.map((_, i) => `<i class="${i < currentQIndex ? "d" : i === currentQIndex ? "c" : ""}"></i>`).join("");
+        hopNext = "";
     }
 
     function answerQuestion(isYes) {
@@ -389,6 +454,7 @@
         scores[picked] = (scores[picked] || 0) + 1;
         const group = AXIS_GROUPS.find(g => g.includes(q.pos));
         lastPick[group] = picked;          // 同点のとき「最後に選んだ側」を採用
+        hopNext = isYes ? "hopL" : "hopR";
 
         currentQIndex++;
         if (currentQIndex < questions.length) {
@@ -411,6 +477,8 @@
         document.getElementById('my-class-name').innerText = charInfo.name;
         document.getElementById('my-catch').innerText = charInfo.catch;
 
+        const t = myCalculatedType;
+        document.getElementById('my-char').innerHTML = pixSvg({ EI: t[0], SN: t[1], TF: t[2], JP: t[3] }, "pop");
         showScreen('screen-my-result');
     }
 
