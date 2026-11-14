@@ -152,6 +152,10 @@
         .modes { display: flex; gap: 6px; justify-content: center; margin: 0 0 10px; }
         .modes button { width: auto; margin: 0; padding: 6px 14px; font-size: 0.85rem; }
         @media (prefers-reduced-motion: reduce) { .eg { animation: none; } }
+        .duo { display: flex; justify-content: center; } .duo svg { width: 140px; }
+        .gauge { position: relative; height: 22px; border: 2px solid #555; border-radius: 6px; background: #2a2a3a; margin: 0 0 12px; overflow: hidden; }
+        .gauge i { display: block; height: 100%; width: 100%; background: var(--danger-color); }
+        .gauge b { position: absolute; inset: 0; text-align: center; font-size: 0.8rem; line-height: 22px; color: #fff; }
     </style>
 </head>
 <body>
@@ -226,6 +230,8 @@
     <!-- 画面5: 相性査定結果表示 -->
     <div id="screen-result" class="screen">
         <h3>📊 査定結果レポート</h3>
+        <div class="stage" style="background:#f1dfc0"><div id="duo" class="duo"></div><div class="ground"></div></div>
+        <div class="gauge"><i id="gauge-fill"></i><b id="gauge-label"></b></div>
         <div class="result-box">
             <p><strong>ペア:</strong> <span id="res-pair"></span></p>
             <p><strong>シチュエーション:</strong> <span id="res-situation"></span></p>
@@ -288,7 +294,11 @@
 
     const DEFAULT_SITUATIONS = [
         { id: "1", name: "通常の酒場での雑談", locked: false },
-        { id: "2", name: "修羅場のデスマーチ炎上編", locked: true }
+        { id: "2", name: "修羅場のデスマーチ炎上編", locked: true },
+        { id: "3", name: "初デートのぎこちないカフェ", locked: false },
+        { id: "4", name: "飲み会の幹事決め", locked: false },
+        { id: "5", name: "満席の新幹線・隣の席", locked: true },
+        { id: "6", name: "家族LINEの返信地獄", locked: false }
     ];
 
     const AXIS_GROUPS = ["EI", "SN", "TF", "JP"];
@@ -318,6 +328,7 @@
 
     function showScreen(screenId) {
         if (screenId !== 'screen-my-result' && typeof heroTimer !== 'undefined') clearInterval(heroTimer);
+        if (screenId !== 'screen-result' && typeof cmpTimer !== 'undefined') clearInterval(cmpTimer);
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
         document.getElementById(screenId).classList.add('active');
     }
@@ -370,7 +381,11 @@
             const valid = d.situations
                 .filter(r => r.situation_id !== "" && r.situation_name)
                 .map(r => ({ id: String(r.situation_id), name: String(r.situation_name), locked: String(r.is_locked_by_ad).toUpperCase() === "TRUE" }));
-            if (valid.length > 0) situations = valid;
+            if (valid.length > 0) {   // 内蔵の定義にシートの内容を上書きして統合（シートは名前・ロック設定の調整用）
+                const m = new Map(DEFAULT_SITUATIONS.map(s => [s.id, s]));
+                valid.forEach(s => m.set(s.id, s));
+                situations = [...m.values()];
+            }
         }
     }
 
@@ -583,6 +598,119 @@
         showScreen('screen-compat');
     }
 
+
+    // ---------- ブラック相性エンジン（シート未登録のペアを自動で査定） ----------
+    const LEGACY_FALLBACK = "お互いに無関心すぎて、逆に永遠に会話が平行線をたどるミステリー空間。";
+    // [会話中にやること, 地雷（苦手なもの）, 特効薬]
+    const TALK = {
+        INTJ: ["三手先の結論から話し始める", "目的のない雑談", "戦略眼のモノクル"],
+        INTP: ["話の途中で言葉の定義を確認し始める", "「とりあえず」で進む会議", "禁断の脚注の書"],
+        ENTJ: ["会話を議事録の形式で進行する", "決まらない沈黙", "即断の軍配"],
+        ENTP: ["反論のためだけに反対側へ回る", "「前例通り」の一言", "屁理屈の永久機関"],
+        INFJ: ["言葉の裏の裏まで読んで黙り込む", "本音の見えない愛想笑い", "星読みの静寂の水晶"],
+        INFP: ["急に自分の世界観を語り出す", "数字だけで語られる評価", "夢見の毛布"],
+        ENFJ: ["全員が話せるよう勝手に気配りを始める", "輪を乱す沈黙の人", "勇者の励ましの旗"],
+        ENFP: ["三つ前の話題に急に戻る", "同じ話の繰り返し", "気まぐれ花火セット"],
+        ISTJ: ["前回の約束を日付つきで読み上げる", "その場のノリで変わる予定", "整頓の羊皮紙"],
+        ISFJ: ["さりげなく全員分のお茶を用意する", "頼みごとを断る空気", "手作りの癒やしクッキー"],
+        ESTJ: ["雑談にも期限と担当者を決める", "やる気のない「たぶん」", "鉄の進行表"],
+        ESFJ: ["誰かの近況に全員を巻き込む", "内輪ネタの輪に入れない時間", "宴の乾杯の杯"],
+        ISTP: ["相づちを打たずに道具を見つめる", "感情の説明会", "万能ドライバー"],
+        ISFP: ["話の途中で窓の外の猫を見つける", "予定を詰め込む会話", "旅人の木漏れ日の栞"],
+        ESTP: ["結論が出る前に実行を始める", "長すぎる前置き", "疾風のエナジードリンク"],
+        ESFP: ["ネタを挟みすぎて本題を見失う", "盛り上がりの足りない空気", "吟遊詩人のリュート"]
+    };
+    const TPL = {
+        high: [
+            "{A}が{aAct}と、{B}は{bMine}を前にしたような顔になる。そこへ{B}が{bAct}ので、会話は着地点を失った。",
+            "{A}は{aAct}。{B}は{bAct}。ここまでは良い。問題は、{A}が{aMine}を、{B}が{bMine}を何より嫌うこと。互いの地雷を、的確に踏み合っている。",
+            "{B}が{bAct}間、{A}は{aMine}を思い出して遠い目をしている。会話ではなく、もはや異文化交流。",
+            "{A}が{aAct}たび、{B}の理性ゲージが削れていく。{B}は{bAct}ことで反撃するが、完全に逆効果。"
+        ],
+        mid: [
+            "{A}が{aAct}と、{B}は一応うなずく。しかし{B}が{bAct}と、今度は{A}が{aMine}を見た顔になる。互いに我慢の交代制。",
+            "{A}と{B}は会話のテンポが半拍ずれている。{A}は{aAct}、{B}は{bAct}。笑っているが、目は少し死んでいる。",
+            "悪くはない。でも{A}が{aMine}を避け、{B}が{bMine}を避けるうち、話題が天気と近所の猫だけになる。",
+            "{B}が{bAct}と、{A}も負けじと{aAct}。キャッチボールのはずが、お互い別の球で遊んでいる。"
+        ],
+        low: [
+            "{A}が{aAct}。{B}が{bAct}。これが奇跡的に噛み合い、気づけば終電も朝日も通り過ぎている。",
+            "{A}と{B}は{aMine}も{bMine}も笑い飛ばせる戦友。問題は、楽しすぎて会話の終え方を誰も知らないこと。",
+            "{A}が{aAct}と、{B}はすでに同じことを考えていた。話が早すぎて、周囲だけが置いていかれる。",
+            "{A}が{aAct}のに、{B}が{bAct}ので、周りの人は会話に入れず、静かに席を移動する。"
+        ],
+        same: [
+            "{A}同士。二人とも{aAct}ので、同時に話し始めて同時に黙る。{aMine}が出た瞬間だけ息ぴったり。",
+            "鏡に向かって喋っているのと同じ。{aAct}癖が二人分そろい、会話の終わりは永遠に来ない。",
+            "お互いの考えが分かりすぎて、{aAct}たびに「それ私も思ってた」が渋滞する。{aMine}にだけは、二人とも勝てない。"
+        ]
+    };
+    const ENDS = {
+        high: ["（周囲の証言：二人の間だけ気圧が違った）", "（解散後、二人とも同じ場所で深呼吸をした）", "（ギルド掲示板に「あの席は避けろ」の貼り紙が出た）"],
+        mid: ["（解散後、それぞれ別の人に愚痴を言って満足した）", "（帰り道、二人とも「悪い人じゃない」と三回言った）", "（次の約束は、なぜか二人とも「また今度」で一致した）"],
+        low: ["（翌朝、お互いの寝落ち通話が履歴に残っていた）", "（解散の挨拶だけで、さらに二十分かかった）", "（周囲の人は静かに会計を済ませた）"]
+    };
+    ENDS.same = ENDS.low;
+    // シチュエーション別：限界時間の補正と、結論に添えるオチ（[ズレ大, 中, 小]）
+    const SIT_F = { "2": 0.5, "3": 0.8, "4": 0.9, "5": 0.6, "6": 1.3 };
+    const SIT_END = {
+        "2": { high: ["（その夜、サーバーより先に二人の会話が落ちた）", "（障害報告書の原因欄に「会話」と書かれた）"],
+               mid: ["（復旧作業より、お互いの言い方への指摘が長引いた）", "（深夜二時、チャットだけが妙に丁寧になった）"],
+               low: ["（徹夜明け、二人だけ妙にテンションが高かった）", "（炎上が鎮火したのに、二人の雑談だけ燃え続けた）"] },
+        "3": { high: ["（会計の瞬間、二人とも財布を探すふりをして時間が止まった）", "（解散後、お互い「楽しかったです」の文面を三十分推敲した）"],
+               mid: ["（別れ際の「また連絡します」が、どちらの本心かは永遠の謎）", "（帰りの電車で、二人とも今日の自分の発言を反省した）"],
+               low: ["（予定の二時間が、気づけば六時間になっていた）", "（店員さんが閉店を言い出せず、遠くで見守っていた）"] },
+        "4": { high: ["（結局、欠席者が幹事に決まった）", "（幹事決めだけで、飲み会の予算が溶けた）"],
+               mid: ["（二人でじゃんけんをしたが、三回あいこが続いた）", "（最終的に「会場は後で決めよう」で解散した）"],
+               low: ["（意気投合して、二人で幹事を引き受け会場を二つ予約した）", "（幹事が決まった瞬間、二人とも二次会の話を始めていた）"] },
+        "5": { high: ["（車内アナウンスが、救いの女神に聞こえた）", "（名古屋で二人とも降りたふりをして立ち上がった）"],
+               mid: ["（二人とも、寝たふりが上達した）", "（静岡あたりで会話が尽き、ずっと富士山の話をしていた）"],
+               low: ["（新大阪に着く頃には、旅行の予定が三つ増えていた）", "（降りるとき、二人とも「あれ、もう着いた？」と言った）"] },
+        "6": { high: ["（既読スルーという名の最終兵器が発動した）", "（返信が来たのは、三日後のスタンプ一個だった）"],
+               mid: ["（「了解」のスタンプだけが、静かに行き交った）", "（既読は付いたが、返信は付かなかった）"],
+               low: ["（通知が止まらず、スマホが熱を持った）", "（ついでに祖母のグループLINEにも拡散された）"] }
+    };
+    const AX_W = [["E","I",1],["S","N",3],["T","F",3],["J","P",2]];   // 会話のズレに効く重み（S/N・T/Fが大きい）
+    function hashStr(s) { let h = 5381; for (const ch of s) h = ((h << 5) + h + ch.charCodeAt(0)) >>> 0; return h; }
+    function mismatchW(a, b) {
+        return AX_W.reduce((w, x) => w + ((a.includes(x[0]) ? x[0] : x[1]) !== (b.includes(x[0]) ? x[0] : x[1]) ? x[2] : 0), 0);
+    }
+    function tailOf(tier, sitId, h) {
+        const s = SIT_END[String(sitId)], k = tier === "same" ? "low" : tier;
+        return s ? s[k][(h >>> 3) % 2] : ENDS[tier][(h >>> 3) % 3];
+    }
+    function genCompat(a, b, sitId) {
+        const h = hashStr([a, b].sort().join("-"));    // 順番を入れ替えても同じ査定になる
+        const w = mismatchW(a, b);
+        const tier = a === b ? "same" : w >= 6 ? "high" : w >= 3 ? "mid" : "low";
+        let lim = Math.max(5, 60 - w * 6 + (h % 7) - 3);
+        lim = Math.max(3, Math.round(lim * (SIT_F[String(sitId)] || 1)));   // シチュエーション補正
+        const tpl = TPL[tier][h % TPL[tier].length];
+        const [aAct, aMine, aItem] = TALK[a], [bAct, bMine, bItem] = TALK[b];
+        const nm = t => (characters[t] || { name: t }).name;
+        const val = { A: nm(a), B: nm(b), aAct, bAct, aMine, bMine };
+        const text = tpl.replace(/\{(\w+)\}/g, (_, k) => val[k]) + tailOf(tier, sitId, h);
+        return { limit_minutes: lim, black_comment: text, recovery_item: `${(h >>> 5) % 2 ? aItem : bItem}（動画視聴）`, is_generated: true };
+    }
+
+    // ---------- 相性画面の演出：向かい合う2体＋限界ゲージ ----------
+    let cmpTimer = null, cmpT = 0, cmpPair = null;
+    function startCompatScene(a, b, limit) {
+        clearInterval(cmpTimer); cmpPair = [a, b]; cmpT = 0;
+        const cfg = t => ({ t, aura: LIGHT_TYPES.includes(t) ? AUR.light[1] : AUR.dark[1], gender: "", blood: "", eto: null });
+        const cA = cfg(a), cB = cfg(b), t0 = Date.now(), DUR = 5000;
+        const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+        const draw = () => {
+            const pct = reduce ? 0 : Math.max(0, 1 - (Date.now() - t0) / DUR);
+            const mode = pct > 0.5 ? "idle" : pct > 0 ? "walk" : "run";   // ゲージが減るほど落ち着きを失い、最後は逃走
+            document.getElementById('duo').innerHTML = `<div>${heroSvg(cA, cmpT, mode, false)}</div><div style="transform:scaleX(-1)">${heroSvg(cB, cmpT, mode, false)}</div>`;
+            document.getElementById('gauge-fill').style.width = (pct * 100) + "%";
+            document.getElementById('gauge-label').innerText = pct > 0 ? `残り ${Math.ceil(limit * pct)} 分` : "限界会話時間 到達！";
+        };
+        draw();
+        if (!reduce) cmpTimer = setInterval(() => { cmpT++; draw(); }, 140);
+    }
+
     // ---------- 相性査定 ----------
     function localFallback(typeA, typeB, situationId) {
         return {
@@ -618,12 +746,16 @@
             if (!data || data.status === "error") throw new Error(data && data.message || "compat failed");
         } catch (e) {
             console.error(e);
-            data = localFallback(typeA, typeB, sitId);
+            data = { is_fallback: true };
             offline = true;
         } finally {
             btn.disabled = false;
             btn.innerText = "ブラック査定を実行する";
         }
+
+        // シートに登録がなければ、相性エンジンで自動査定
+        let generated = false;
+        if (offline || data.is_fallback || data.black_comment === LEGACY_FALLBACK) { data = genCompat(typeA, typeB, sitId); generated = true; }
 
         currentLimit = Number(data.limit_minutes) || 15;
         adUsed = false;
@@ -636,14 +768,15 @@
         document.getElementById('res-comment').innerText = data.black_comment;
         document.getElementById('res-item').innerText = `特効薬: ${data.recovery_item}`;
         document.getElementById('res-note').innerText =
-            offline ? "※ 通信できなかったため暫定データで査定しました。"
-            : data.is_fallback ? "※ このペアは未登録のため暫定査定です。" : "";
+            offline ? "※ 通信できなかったため、ブラック相性エンジンで自動査定しました。"
+            : generated ? "※ ブラック相性エンジンによる自動査定です。" : "";
 
         const adBtn = document.getElementById('btn-ad');
         adBtn.disabled = false;
         adBtn.innerText = `【動画広告】ポーションを服用する (+${AD_BONUS_MINUTES}分延長)`;
 
         showScreen('screen-result');
+        startCompatScene(typeA, typeB, currentLimit);
     }
 
     function watchAd() {
@@ -655,6 +788,7 @@
         const adBtn = document.getElementById('btn-ad');
         adBtn.disabled = true;
         adBtn.innerText = "ポーション服用済み";
+        if (cmpPair) startCompatScene(cmpPair[0], cmpPair[1], currentLimit);
     }
 </script>
 
