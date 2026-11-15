@@ -826,6 +826,12 @@
         "ESFP-INTJ": "{ESFP}の渾身のネタに、{INTJ}は「それの結論は？」と返した。笑いの神様が、静かに席を立った。",
         "ENTP-ISFJ": "{ENTP}の屁理屈に、{ISFJ}はにこにこしながらお茶を出した。反論の勢いは、湯気の中に消えていった。"
     };
+    // 名物ペアの基準時間（分）。シチュエーション補正（SIT_F）はこの値に掛かる。未登録ペアは従来の計算式。
+    const SPECIAL_MIN = {
+        "ENFP-ISTJ": 8,  "ESTJ-INFP": 5,  "ENTP-ISTJ": 20,
+        "ESFJ-INTP": 10, "ENTJ-ENTJ": 15, "ESTP-INFJ": 12,
+        "ENFJ-ISTP": 25, "ESFP-INTJ": 5,  "ENTP-ISFJ": 35
+    };
     const AX_W = [["E","I",1],["S","N",3],["T","F",3],["J","P",2]];   // 会話のズレに効く重み（S/N・T/Fが大きい）
     function hashStr(s) { let h = 5381; for (const ch of s) h = ((h << 5) + h + ch.charCodeAt(0)) >>> 0; return h; }
     function mismatchW(a, b) {
@@ -839,15 +845,16 @@
         const h = hashStr([a, b].sort().join("-"));    // 順番を入れ替えても同じ査定になる
         const w = mismatchW(a, b);
         const tier = a === b ? "same" : w >= 6 ? "high" : w >= 3 ? "mid" : "low";
-        let lim = Math.max(5, 60 - w * 6 + (h % 7) - 3);
+        const pk = [a, b].sort().join("-");
+        let lim = SPECIAL_MIN[pk] != null ? SPECIAL_MIN[pk] : Math.max(5, 60 - w * 6 + (h % 7) - 3);
         lim = Math.max(3, Math.round(lim * (SIT_F[String(sitId)] || 1)));   // シチュエーション補正
-        const tpl = SPECIAL[[a, b].sort().join("-")] || TPL[tier][h % TPL[tier].length];
+        const tpl = SPECIAL[pk] || TPL[tier][h % TPL[tier].length];
         const [aAct, aMine, aItem] = TALK[a], [bAct, bMine, bItem] = TALK[b];
         const nm = t => (characters[t] || { name: t }).name;
         const val = { A: nm(a), B: nm(b), aAct, bAct, aMine, bMine };
         Object.keys(TALK).forEach(k => { val[k] = nm(k); });
         const text = tpl.replace(/\{(\w+)\}/g, (_, k) => val[k]) + tailOf(tier, sitId, h);
-        return { limit_minutes: lim, black_comment: text, recovery_item: `${(h >>> 5) % 2 ? aItem : bItem}（動画視聴）`, is_generated: true };
+        return { limit_minutes: lim, black_comment: text, recovery_item: `${(h >>> 5) % 2 ? TALK[pk.split("-")[0]][2] : TALK[pk.split("-")[1]][2]}（動画視聴）`, is_generated: true };
     }
 
     // ---------- 相性画面の演出：向かい合う2体＋限界ゲージ ----------
