@@ -156,6 +156,12 @@
         .gauge { position: relative; height: 22px; border: 2px solid #555; border-radius: 6px; background: #2a2a3a; margin: 0 0 12px; overflow: hidden; }
         .gauge i { display: block; height: 100%; width: 100%; background: var(--danger-color); }
         .gauge b { position: absolute; inset: 0; text-align: center; font-size: 0.8rem; line-height: 22px; color: #fff; }
+        #my-char { min-height: 240px; display: flex; align-items: flex-end; justify-content: center; }
+        @keyframes shk { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-7deg); } 75% { transform: rotate(7deg); } }
+        .shake { animation: shk .35s infinite; transform-origin: 50% 100%; } .shake2 { animation: shk .16s infinite; transform-origin: 50% 100%; }
+        @keyframes flsh { 0% { filter: brightness(3); } 100% { filter: none; } }
+        .flashing { animation: flsh .6s ease-out; }
+        @media (prefers-reduced-motion: reduce) { .shake, .shake2, .flashing { animation: none; } }
     </style>
 </head>
 <body>
@@ -207,6 +213,8 @@
             <p><strong>特徴:</strong> <span id="my-catch"></span></p>
             <p><strong>星座・属性:</strong> <span id="my-extra"></span></p>
         </div>
+        <button style="background:#d97706;" onclick="shareCard('my')">📤 結果をシェア（画像）</button>
+        <button class="btn-secondary" onclick="window.open(xUrl('my'),'_blank')">𝕏 に文章だけ投稿</button>
         <button onclick="goToCompatWithMyType()">🤝 他のキャラとのブラック相性を測る</button>
         <button class="btn-secondary" onclick="showScreen('screen-menu')">トップに戻る</button>
     </div>
@@ -246,7 +254,9 @@
             <button id="btn-ad" style="background: #059669; margin-top: 0;" onclick="watchAd()">【動画広告】ポーションを服用する (+30分延長)</button>
         </div>
 
-        <button style="margin-top: 20px;" onclick="showScreen('screen-compat')">別のペアを査定する</button>
+        <button style="margin-top: 20px; background:#d97706;" onclick="shareCard('compat')">📤 査定結果をシェア（画像）</button>
+        <button class="btn-secondary" onclick="window.open(xUrl('compat'),'_blank')">𝕏 に文章だけ投稿</button>
+        <button style="margin-top: 8px;" onclick="showScreen('screen-compat')">別のペアを査定する</button>
     </div>
 </div>
 
@@ -328,6 +338,7 @@
 
     function showScreen(screenId) {
         if (screenId !== 'screen-my-result' && typeof heroTimer !== 'undefined') clearInterval(heroTimer);
+        if (screenId !== 'screen-my-result' && typeof hatchTimers !== 'undefined') hatchTimers.forEach(clearTimeout);
         if (screenId !== 'screen-result' && typeof cmpTimer !== 'undefined') clearInterval(cmpTimer);
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
         document.getElementById(screenId).classList.add('active');
@@ -436,11 +447,13 @@
 
     // ---------- 卵・孵化・人型ドット絵 ----------
     const EGG_MAP = ["....oooo....","..oowwwwoo..",".owwwwwwwwo.",".owwwssswwo.","owwwwwwwwwwo","owwsswwwwwwo","owwwwwwwswwo","owwwwwwwwwwo","owwwwsswwwwo",".owwwwwwwwo.",".owwwwwwwwo.","..oowwwwoo..","....oooo...."];
-    function eggSvg() {
+    function eggSvg(stage, cls) {
         const C = { o: "#2f2540", w: "#fff4dc", s: "#f2b8a0" };
         let o = "";
         EGG_MAP.forEach((r, i) => { for (let j = 0; j < 12; j++) if (r[j] !== ".") o += `<rect x="${j * 13}" y="${i * 13}" width="13" height="13" fill="${C[r[j]]}"/>`; });
-        return `<svg class="eg" width="130" viewBox="0 0 156 169" shape-rendering="crispEdges" role="img" aria-label="跳ねる卵">${o}</svg>`;
+        const CR = [[[5,3],[6,4],[5,5]], [[6,6],[7,7],[6,8],[5,9]], [[4,5],[3,6],[7,4],[8,5],[8,8],[7,9],[4,8],[3,7]]];
+        for (let s = 0; s < (stage || 0) && s < 3; s++) CR[s].forEach(q => { o += `<rect x="${q[0] * 13}" y="${q[1] * 13}" width="13" height="13" fill="#2f2540"/>`; });
+        return `<svg class="${cls === undefined ? "eg" : cls}" width="130" viewBox="0 0 156 169" shape-rendering="crispEdges" role="img" aria-label="卵">${o}</svg>`;
     }
     const AREAS = {
         EI: { name: "酒場の広場", bg: "#f1dfc0" }, SN: { name: "ざわめく森", bg: "#cfe8c8" },
@@ -461,6 +474,17 @@
         "午":["pt","#9a6a44","#ffb0c0","dog","#9a6a44","馬の耳"], "未":["fl","#f4f0e6","","puff","#f4f0e6","羊の耳"],
         "申":["rd","#a8784c","#ffd9b8","cat","#a8784c","サル耳"], "酉":["cb","","","cat","#e0803a","とさか"],
         "戌":["fl","#8a5a3c","","dog","#b98a5a","犬耳"], "亥":["rd","#b07a5a","#ffb0c0","puff","#f0a8b8","イノシシ耳"]
+    };
+
+    // 胸のブローチ：12星座＋光・闇（5×5ドット）
+    const EMB = {
+        "牡羊座": [".#.#.","#.#.#","#.#.#","..#..","..#.."], "牡牛座": ["#...#",".###.","#...#","#...#",".###."],
+        "双子座": ["#####",".#.#.",".#.#.",".#.#.","#####"], "蟹座": [".##..","#..#.","..#.#",".#..#","..##."],
+        "獅子座": [".##..","#..#.","#..#.","#...#","...##"], "乙女座": ["#.#.#","#.#.#","#.#.#","#.#.#","..#.."],
+        "天秤座": [".###.","#...#",".....","#####","....."], "蠍座": ["#.#.#","#.#.#","#.#.#","#.#.#","#..##"],
+        "射手座": ["..###","...##","..#.#",".#...","#...."], "山羊座": ["#.#..","#.##.","##..#","#...#",".###."],
+        "水瓶座": [".#.#.","#.#.#",".....",".#.#.","#.#.#"], "魚座": ["#...#","#.#.#","#####","#.#.#","#...#"],
+        light: ["..#..",".###.","#####",".###.","..#.."], dark: [".###.","#....","#....","#....",".###."]
     };
 
     function heroSvg(c, t, mode, first) {
@@ -488,11 +512,11 @@
         }
         if (c.gender === "f") R(M, 9, 15, 14, 17, HC);
         R(M, 10, 23, 12, 11, OL); R(M, 11, 24, 10, 9, tun); R(M, 11, 31, 10, 2, tun2);
-        R(M, 15, 26, 2, 2, c.aura);
+        (EMB[c.emb] || (c.aura === AUR.dark[1] ? EMB.dark : EMB.light)).forEach((row, i) => { for (let j = 0; j < 5; j++) if (row[j] === "#") R(M, 14 + j, 25 + i, 1, 1, c.aura); });
         let aL = 0, aR = 0; if (mode === "walk") { aL = p === 1 ? 1 : p === 3 ? -1 : 0; aR = -aL; } if (run) { aL = p % 2 ? -2 : 2; aR = -aL; }
         R(M, 9, 25 + aL, 2, 7, tun); R(M, 9, 32 + aL, 2, 2, SK); R(M, 21, 25 + aR, 2, 7, tun); R(M, 21, 32 + aR, 2, 2, SK);
         if (c.blood) R(M, 12, 23, 8, 2, { A: "#4fa3e0", B: "#e0574f", O: "#e8c14a", AB: "#8f5bd6" }[c.blood]);
-        if (s.SN === "S") { R(M, 11, 29, 10, 1, "#8a5a3c"); R(M, 15, 29, 2, 1, "#ffd34e"); }
+        if (s.SN === "S") { R(M, 11, 30, 10, 1, "#8a5a3c"); R(M, 15, 30, 2, 1, "#ffd34e"); }
         R(M, 9, 11, 14, 13, OL); R(M, 10, 12, 12, 11, SK);
         if (z && z[0]) {
             const k = z[0], e1 = z[1], e2 = z[2];
@@ -516,6 +540,90 @@
         return `<svg class="${first ? "pop" : ""}" width="160" viewBox="0 0 160 220" shape-rendering="crispEdges" role="img" aria-label="孵化したキャラクター">${A.join("")}${L.join("")}<g transform="translate(0,${dy * 5})">${M.join("")}</g></svg>`;
     }
 
+
+    // ---------- シェアカード（画像生成） ----------
+    const shareData = { my: null, compat: null };
+    const HASH = "#TALKBURST #異世界ギルド診断";
+
+    function svgToImage(svg) {
+        return new Promise((res, rej) => {
+            const img = new Image();
+            img.onload = () => res(img); img.onerror = rej;
+            img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg.replace("<svg ", '<svg xmlns="http://www.w3.org/2000/svg" '));
+        });
+    }
+    function wrapText(g, text, x, y, maxW, lh, maxLines) {
+        let line = "", n = 0;
+        for (const ch of text) {
+            if (g.measureText(line + ch).width > maxW && line) {
+                n++;
+                if (n >= maxLines) { g.fillText(line.slice(0, -1) + "…", x, y); return y + lh; }
+                g.fillText(line, x, y); y += lh; line = ch;
+            } else line += ch;
+        }
+        if (line) { g.fillText(line, x, y); y += lh; }
+        return y;
+    }
+    function cardBase(g, W, H, panelH) {
+        g.fillStyle = "#1a1a24"; g.fillRect(0, 0, W, H);
+        g.strokeStyle = "#ffd34e"; g.lineWidth = 6; g.strokeRect(24, 24, W - 48, H - 48);
+        g.textAlign = "center"; g.fillStyle = "#ffd34e"; g.font = "bold 58px sans-serif"; g.fillText("TALK BURST", W / 2, 110);
+        g.fillStyle = "#b8b8c8"; g.font = "28px sans-serif"; g.fillText("異世界ギルドのブラック相性＆職種診断", W / 2, 152);
+        g.fillStyle = "#f1dfc0"; g.fillRect(90, 180, 900, panelH);
+        g.fillStyle = "#6b8f4e"; g.fillRect(90, 180 + panelH - 44, 900, 44);
+        g.strokeStyle = "#3a2d4f"; g.lineWidth = 8; g.strokeRect(90, 180, 900, panelH);
+    }
+    async function buildCard(kind) {
+        const W = 1080, H = 1350, c = document.createElement("canvas");
+        c.width = W; c.height = H;
+        const g = c.getContext("2d"), F = '"Hiragino Sans","Noto Sans JP","Yu Gothic",sans-serif';
+        g.imageSmoothingEnabled = false;
+        if (kind === "my") {
+            const d = shareData.my;
+            cardBase(g, W, H, 780);
+            g.drawImage(await svgToImage(heroSvg(d.cfg, 0, "idle", false)), 300, 200, 480, 660);
+            g.fillStyle = "#ffffff"; g.font = `bold 56px ${F}`;
+            let y = wrapText(g, d.title, W / 2, 1040, 900, 70, 2);
+            g.font = `40px ${F}`; g.fillStyle = "#ffd34e"; g.fillText(`${d.type}　${d.className}`, W / 2, y + 20);
+            g.font = `32px ${F}`; g.fillStyle = "#b8b8c8"; g.fillText(d.extra, W / 2, y + 76);
+        } else {
+            const d = shareData.compat;
+            cardBase(g, W, H, 540);
+            const cfg = t => ({ t, aura: LIGHT_TYPES.includes(t) ? AUR.light[1] : AUR.dark[1], gender: "", blood: "", eto: null });
+            g.drawImage(await svgToImage(heroSvg(cfg(d.a), 0, "idle", false)), 130, 190, 384, 528);
+            const imgB = await svgToImage(heroSvg(cfg(d.b), 0, "idle", false));
+            g.save(); g.translate(950, 0); g.scale(-1, 1); g.drawImage(imgB, 0, 190, 384, 528); g.restore();
+            g.fillStyle = "#ffffff"; g.font = `bold 42px ${F}`; g.fillText(`${d.nameA} × ${d.nameB}`, W / 2, 800);
+            g.fillStyle = "#b8b8c8"; g.font = `28px ${F}`; g.fillText(d.sitName, W / 2, 846);
+            g.fillStyle = "#ff6b6b"; g.font = `bold 86px ${F}`; g.fillText(`限界会話時間 ${currentLimit}分`, W / 2, 950);
+            g.textAlign = "left"; g.fillStyle = "#ffffff"; g.font = `30px ${F}`;
+            const y = wrapText(g, d.comment, 90, 1018, 900, 44, 6);
+            g.textAlign = "center"; g.fillStyle = "#6ee7b7"; g.font = `28px ${F}`; g.fillText(`特効薬: ${d.item}`, W / 2, Math.min(y + 14, 1300));
+        }
+        g.textAlign = "center"; g.fillStyle = "#8888a0"; g.font = `26px ${F}`; g.fillText(HASH, W / 2, 1316);
+        return c;
+    }
+    function shareText(kind) {
+        if (kind === "my") { const d = shareData.my; return d ? `私は「${d.title}」でした！ ${HASH}` : HASH; }
+        const d = shareData.compat; return d ? `${d.nameA}と${d.nameB}の限界会話時間は${currentLimit}分でした… ${HASH}` : HASH;
+    }
+    function xUrl(kind) { return "https://twitter.com/intent/tweet?text=" + encodeURIComponent(shareText(kind)); }
+    async function shareCard(kind) {
+        if (!shareData[kind]) return;
+        try {
+            const canvas = await buildCard(kind);
+            const blob = await new Promise(r => canvas.toBlob(r, "image/png"));
+            const file = new File([blob], `talk-burst-${kind}.png`, { type: "image/png" });
+            if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                try { await navigator.share({ files: [file], text: shareText(kind) }); return; }
+                catch (e) { if (e && e.name === "AbortError") return; }
+            }
+            const a = document.createElement("a");     // 共有に未対応の端末は画像を保存
+            a.href = URL.createObjectURL(blob); a.download = file.name; a.click();
+            setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+        } catch (e) { console.error(e); alert("画像の作成に失敗しました。もう一度お試しください。"); }
+    }
+
     // ---------- 孵化（プロフィール入力 → 結果） ----------
     let heroTimer = null, heroT = 0, heroMode = "walk", heroCfg = null;
     function heroDraw(first) { document.getElementById('my-char').innerHTML = heroSvg(heroCfg, heroT, heroMode, first); }
@@ -524,6 +632,22 @@
         clearInterval(heroTimer); heroT = 0; heroDraw(true);
         if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
         heroTimer = setInterval(() => { heroT++; heroDraw(false); }, 140);
+    }
+    // 孵化演出：卵が揺れてひびが入り、光って、キャラが登場
+    let hatchTimers = [];
+    function playHatch() {
+        hatchTimers.forEach(clearTimeout); hatchTimers = [];
+        clearInterval(heroTimer);
+        const el = document.getElementById('my-char'), stg = document.getElementById('hatch-stage');
+        if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) { startHero(); return; }
+        [0, 1, 2, 3].forEach(s => hatchTimers.push(setTimeout(() => {
+            el.innerHTML = `<div class="${s >= 2 ? "shake2" : "shake"}">${eggSvg(s, "")}</div>`;
+        }, s * 450)));
+        hatchTimers.push(setTimeout(() => {
+            stg.classList.add("flashing");
+            startHero();
+            hatchTimers.push(setTimeout(() => stg.classList.remove("flashing"), 700));
+        }, 1900));
     }
     function initProfile() {
         const fill = (id, opts) => { const sel = document.getElementById(id); sel.innerHTML = ""; opts.forEach(o => { const e = document.createElement("option"); e.value = o[0]; e.textContent = o[1]; sel.appendChild(e); }); };
@@ -540,12 +664,14 @@
         const sg = (m && d) ? signOf(m, d) : null;
         const eto = y ? ETO_ORDER[y % 12] : null;
         const au = AUR[sg ? sg[2] : (LIGHT_TYPES.includes(t) ? "light" : "dark")];
-        heroCfg = { t, blood: v("p-blood"), gender: v("p-gender"), aura: au[1], eto: eto ? ETO[eto] : null };
+        const emb = sg ? sg[0] : (LIGHT_TYPES.includes(t) ? "light" : "dark");
+        heroCfg = { t, blood: v("p-blood"), gender: v("p-gender"), aura: au[1], emb, eto: eto ? ETO[eto] : null };
         const cn = (characters[t] || { name: "" }).name;
         document.getElementById('my-title').innerText = `${au[0]}をまとう ${eto ? ETO[eto][5] + "の " : ""}${cn}`;
         document.getElementById('my-extra').innerText = `${sg ? sg[1] + " " + sg[0] : "星座は秘密"}／${au[0]}属性${eto ? "／" + eto + "年" : ""}`;
+        shareData.my = { type: t, className: cn, title: document.getElementById('my-title').innerText, extra: document.getElementById('my-extra').innerText, cfg: heroCfg };
         showScreen('screen-my-result');
-        startHero();
+        playHatch();
     }
 
     let hopNext = "";
@@ -788,6 +914,7 @@
         adBtn.disabled = false;
         adBtn.innerText = `【動画広告】ポーションを服用する (+${AD_BONUS_MINUTES}分延長)`;
 
+        shareData.compat = { a: typeA, b: typeB, nameA: nameA, nameB: nameB, sitName: sit.name, comment: data.black_comment, item: data.recovery_item };
         showScreen('screen-result');
         startCompatScene(typeA, typeB, currentLimit);
     }
