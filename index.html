@@ -162,12 +162,30 @@
         @keyframes flsh { 0% { filter: brightness(3); } 100% { filter: none; } }
         .flashing { animation: flsh .6s ease-out; }
         @media (prefers-reduced-motion: reduce) { .shake, .shake2, .flashing { animation: none; } }
+
+        /* ---- 画面の崩れ修正（2026-11-15） ---- */
+        .nb { display: inline-block; }
+        h1, h3 { text-wrap: balance; }
+        p, button, .q-text, .note { text-wrap: pretty; }
+        .note { margin-bottom: 14px; }
+        .row2 { display: flex; gap: 8px; }
+        .row2 select { flex: 1; min-width: 0; }
+        @media (max-width: 420px) {
+            body { padding: 12px; }
+            .container { padding: 20px 18px; }
+        }
+        @media (max-height: 700px) {
+            .stage svg { width: 130px; }
+            #q-char { padding-top: 22px; }
+            .question-box { padding: 14px 16px; margin-bottom: 12px; }
+            h1 { margin-bottom: 12px; }
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>⚔️ 異世界ギルド：ブラック判定所 ⚔️</h1>
+    <h1>⚔️ <span class="nb">異世界ギルド：</span><span class="nb">ブラック判定所</span> ⚔️</h1>
 
     <!-- 画面1: メニュー画面 -->
     <div id="screen-menu" class="screen active">
@@ -193,7 +211,7 @@
         <h3>🥚 もうすぐ孵化します</h3>
         <p class="note">答えるほど、見た目と称号が細かくなります。どれも「答えたくない」でOK。入力した内容はこの端末の中だけで使われ、送信も保存もされません。</p>
         <label>生まれ年（干支）:</label><select id="p-year"></select>
-        <label>誕生月日（星座）:</label><select id="p-month"></select><select id="p-day"></select>
+        <label>誕生月日（星座）:</label><div class="row2"><select id="p-month"></select><select id="p-day"></select></div>
         <label>血液型:</label>
         <select id="p-blood"><option value="">答えたくない</option><option>A</option><option>B</option><option>O</option><option>AB</option></select>
         <label>性別:</label>
@@ -215,7 +233,7 @@
         </div>
         <button style="background:#d97706;" onclick="shareCard('my')">📤 結果をシェア（画像）</button>
         <button class="btn-secondary" onclick="window.open(xUrl('my'),'_blank')">𝕏 に文章だけ投稿</button>
-        <button onclick="goToCompatWithMyType()">🤝 他のキャラとのブラック相性を測る</button>
+        <button onclick="goToCompatWithMyType()">🤝 <span class="nb">他のキャラとの</span><span class="nb">ブラック相性を測る</span></button>
         <button class="btn-secondary" onclick="showScreen('screen-menu')">トップに戻る</button>
     </div>
 
@@ -251,7 +269,7 @@
         <div class="ad-banner">
             <p style="font-size: 0.85rem; color: var(--text-sub); margin: 0 0 10px 0;">🎁 広告を見て耐性を強化しますか？</p>
             <p style="font-size: 0.9rem; margin: 0 0 10px 0;"><strong id="res-item"></strong></p>
-            <button id="btn-ad" style="background: #059669; margin-top: 0;" onclick="watchAd()">【動画広告】ポーションを服用する (+30分延長)</button>
+            <button id="btn-ad" style="background: #059669; margin-top: 0;" onclick="watchAd()"><span class="nb">【動画広告】</span><span class="nb">ポーションを服用する</span> <span class="nb">(+30分延長)</span></button>
         </div>
 
         <button style="margin-top: 20px; background:#d97706;" onclick="shareCard('compat')">📤 査定結果をシェア（画像）</button>
