@@ -138,7 +138,7 @@
         .stage svg { display: block; margin: 0 auto; width: 170px; }
         .stage .ground { height: 12px; background: #6b8f4e; border-top: 3px solid #3a2d4f; }
         .track { display: flex; gap: 4px; justify-content: center; margin: 0 0 10px; }
-        .track i { width: 14px; height: 14px; background: #3a3a4e; border: 2px solid #555; display: block; }
+        .track i { flex: 1 1 0; max-width: 14px; min-width: 6px; height: 14px; background: #3a3a4e; border: 2px solid #555; display: block; }
         .track i.d { background: var(--accent-color); border-color: #fff; }
         .track i.c { background: #fff; border-color: var(--accent-color); }
         @keyframes hopL { 40% { transform: translate(-28px,-14px); } }
@@ -170,19 +170,42 @@
         .note { margin-bottom: 14px; }
         .row2 { display: flex; gap: 8px; }
         .row2 select { flex: 1; min-width: 0; }
+        .row2 > div { flex: 1; min-width: 0; }
+        .row2 > div select { width: 100%; }
+        /* 5段階の回答ボタン */
+        .scale { display: flex; align-items: center; justify-content: space-between; margin: 6px 2px 4px; }
+        .scale button.sc { flex: none; padding: 0; margin: 0; border-radius: 50%; border: 3px solid; box-shadow: none; aspect-ratio: 1; }
+        .scale button.sc:active { transform: scale(0.9); }
+        .scale button.a2 { width: clamp(44px, 16vw, 62px); border-color: #d97706; background: rgba(217, 119, 6, 0.28); }
+        .scale button.a1 { width: clamp(38px, 13.5vw, 50px); border-color: #e9a24a; background: rgba(233, 162, 74, 0.16); }
+        .scale button.n0 { width: clamp(36px, 12vw, 44px); border-color: #8a8aa0; background: rgba(138, 138, 160, 0.14); }
+        .scale button.d1 { width: clamp(38px, 13.5vw, 50px); border-color: #8c9ae0; background: rgba(140, 154, 224, 0.16); }
+        .scale button.d2 { width: clamp(44px, 16vw, 62px); border-color: #5a6fc8; background: rgba(90, 111, 200, 0.28); }
+        .scale button.a2:active { background: #d97706; } .scale button.a1:active { background: #e9a24a; } .scale button.n0:active { background: #8a8aa0; }
+        .scale button.d1:active { background: #8c9ae0; } .scale button.d2:active { background: #5a6fc8; }
+        .scale-lab { display: flex; justify-content: space-between; font-size: 0.72rem; color: #9a9ab0; margin: 2px 2px 0; }
+        /* 性格バランス */
+        .bal-box { margin-top: 10px; padding-top: 8px; border-top: 1px dashed #3a3a4e; }
+        .bal-t { font-size: 0.8rem; color: #9a9ab0; margin-bottom: 4px; }
+        .bal-row { margin: 8px 0; }
+        .bal-l { display: flex; justify-content: space-between; font-size: 0.78rem; color: #c8c8d8; margin-bottom: 3px; }
+        .bal { height: 8px; background: #4a5a9a; border-radius: 4px; overflow: hidden; }
+        .bal i { display: block; height: 100%; background: #d97706; }
+        #snd-btn { position: fixed; top: calc(env(safe-area-inset-top, 0px) + 8px); right: 10px; z-index: 50; width: 40px; height: 40px; padding: 0; margin: 0; border-radius: 50%; font-size: 1.1rem; line-height: 1; background: rgba(40, 40, 56, 0.92); border: 1px solid #4a4a63; box-shadow: none; }
         @media (max-width: 420px) {
             body { padding: 12px; }
             .container { padding: 20px 18px; }
         }
         @media (max-height: 700px) {
             .stage svg { width: 130px; }
-            #q-char { padding-top: 22px; }
+            #q-char { padding-top: 34px; }
             .question-box { padding: 14px 16px; margin-bottom: 12px; }
             h1 { margin-bottom: 12px; }
         }
     </style>
 </head>
 <body>
+<button id="snd-btn" type="button" onclick="SFX.toggle()" aria-label="サウンドのオン・オフ" title="サウンド">🔊</button>
 
 <div class="container">
     <h1>⚔️ <span class="nb">異世界ギルド：</span><span class="nb">ブラック判定所</span> ⚔️</h1>
@@ -190,7 +213,7 @@
     <!-- 画面1: メニュー画面 -->
     <div id="screen-menu" class="screen active">
         <p style="text-align: center; color: var(--text-sub);">あなたのギルド職種を判定し、他の冒険者との「限界会話時間」をシニカルに分析します。</p>
-        <button onclick="startDiagnosis()">📜 職種診断を始める (全12問)</button>
+        <button onclick="startDiagnosis()">📜 職種診断を始める (全16問)</button>
         <button class="btn-secondary" onclick="showScreen('screen-compat')">👥 直接タイプを選んで相性判定</button>
     </div>
 
@@ -199,11 +222,17 @@
         <div id="stage" class="stage"><div id="q-area" class="area"></div><div id="q-char"></div><div class="ground"></div></div>
         <div id="q-track" class="track"></div>
         <div class="question-box">
-            <div id="q-progress" class="q-progress">質問 1 / 12</div>
+            <div id="q-progress" class="q-progress">質問 1 / 16</div>
             <div id="q-text" class="q-text">ここに質問文が入ります</div>
         </div>
-        <button onclick="answerQuestion(true)">◀ はい（当てはまる）</button>
-        <button class="btn-secondary" onclick="answerQuestion(false)">いいえ（当てはまらない） ▶</button>
+        <div class="scale" role="group" aria-label="回答（5段階）">
+            <button type="button" class="sc a2" onclick="answerQuestion(2)" aria-label="そう思う"></button>
+            <button type="button" class="sc a1" onclick="answerQuestion(1)" aria-label="ややそう思う"></button>
+            <button type="button" class="sc n0" onclick="answerQuestion(0)" aria-label="どちらともいえない"></button>
+            <button type="button" class="sc d1" onclick="answerQuestion(-1)" aria-label="あまりそう思わない"></button>
+            <button type="button" class="sc d2" onclick="answerQuestion(-2)" aria-label="そう思わない"></button>
+        </div>
+        <div class="scale-lab"><span>◀ そう思う</span><span>どちらとも</span><span>そう思わない ▶</span></div>
     </div>
 
     <!-- 画面2.5: 孵化前のプロフィール（すべて任意） -->
@@ -216,6 +245,10 @@
         <select id="p-blood"><option value="">答えたくない</option><option>A</option><option>B</option><option>O</option><option>AB</option></select>
         <label>性別:</label>
         <select id="p-gender"><option value="">答えたくない</option><option value="m">男性</option><option value="f">女性</option><option value="n">どちらでもない</option></select>
+        <div class="row2">
+            <div><label>キャラの髪色:</label><select id="p-hair"></select></div>
+            <div><label>キャラの肌色:</label><select id="p-skin"></select></div>
+        </div>
         <button onclick="hatch()">🥚 孵化させる</button>
     </div>
 
@@ -229,7 +262,11 @@
             <p><strong>タイプ:</strong> <span id="my-type-code" class="my-type-badge"></span></p>
             <p><strong>ギルド職種:</strong> <span id="my-class-name" style="font-size: 1.2rem; font-weight: bold;"></span></p>
             <p><strong>特徴:</strong> <span id="my-catch"></span></p>
+            <p><strong>口癖:</strong> <span id="my-saying"></span></p>
+            <p><strong>弱点:</strong> <span id="my-weak"></span></p>
+            <p><strong>得意技:</strong> <span id="my-skill"></span></p>
             <p><strong>星座・属性:</strong> <span id="my-extra"></span></p>
+            <div id="my-balance" class="bal-box"></div>
         </div>
         <button style="background:#d97706;" onclick="shareCard('my')">📤 結果をシェア（画像）</button>
         <button class="btn-secondary" onclick="window.open(xUrl('my'),'_blank')">𝕏 に文章だけ投稿</button>
@@ -304,21 +341,46 @@
         "ESFP": { name: "吟遊詩人", catch: "明るさ・柔軟・社交" }
     };
 
-    // pos = 「はい」で加点される側 / neg = 「いいえ」で加点される側（シートの weight_positive / weight_negative と同じ意味）
+    // pos = 「そう思う」で加点される側 / neg = 「そう思わない」で加点される側（シートの weight_positive / weight_negative と同じ意味）
+    // 各軸4問。軸ごとに2問ずつ逆向きにして、回答のクセで偏らないようにしている。
     const DEFAULT_QUESTIONS = [
         { text: "パーティーの宴会では自分から積極的に話しかけるほうだ", pos: "E", neg: "I" },
         { text: "大勢で過ごすより、一人の時間でエネルギーを充電したい", pos: "I", neg: "E" },
         { text: "初対面の相手ともすぐに会話を盛り上げることができる", pos: "E", neg: "I" },
+        { text: "初対面の集まりでは、聞き役に回って様子をうかがうことが多い", pos: "I", neg: "E" },
         { text: "具体的な事実や目の前のデータを何よりも信用する", pos: "S", neg: "N" },
         { text: "未来の可能性や抽象的なアイデアを考えるのが好きだ", pos: "N", neg: "S" },
+        { text: "新しいことを始めるときは、前例や実績を確かめてから動きたい", pos: "S", neg: "N" },
         { text: "現実的な手順よりも、全体のコンセプトや意味を重視する", pos: "N", neg: "S" },
         { text: "感情や人間関係よりも、客観的な論理と法則で決断する", pos: "T", neg: "F" },
         { text: "他人の気持ちに共感し、調和を保つことが何より大切だ", pos: "F", neg: "T" },
         { text: "問題が起きた時、情を挟まずに事実に基づいた効率的解決を選ぶ", pos: "T", neg: "F" },
+        { text: "決断するとき、関わる人が傷つかないかを真っ先に考える", pos: "F", neg: "T" },
         { text: "旅の計画はあらかじめきっちり立てて行動したい", pos: "J", neg: "P" },
         { text: "状況に応じて臨機応変に柔軟な対応をする方が得意だ", pos: "P", neg: "J" },
-        { text: "締め切りや約束事は必ず厳守する計画派だ", pos: "J", neg: "P" }
+        { text: "締め切りや約束事は必ず厳守する計画派だ", pos: "J", neg: "P" },
+        { text: "予定は決めすぎず、その日の気分で動く余白を残したい", pos: "P", neg: "J" }
     ];
+
+    // 結果画面・シェアカードに出す「口癖・弱点・得意技」
+    const PROFILE = {
+        INTJ: { saying: "想定の範囲内です", weak: "雑談のゴールが見えず、固まる", skill: "三手先まで読んだ撤退戦" },
+        INTP: { saying: "ちょっと調べてから返事するね", weak: "調べ始めると戻ってこない", skill: "誰も気づかない矛盾の発見" },
+        ENTJ: { saying: "で、結論は？", weak: "議長のつもりが、全員の逆風になる", skill: "三分で役割分担を終える" },
+        ENTP: { saying: "逆に、こう考えたら？", weak: "議論に勝つほど、友達が減る", skill: "どんな相手にも反論をひねり出す" },
+        INFJ: { saying: "いや、大丈夫…（大丈夫ではない）", weak: "察しすぎて、先に疲れる", skill: "言葉の裏の裏まで読み切る" },
+        INFP: { saying: "それ、なんか違う気がする", weak: "理想が高すぎて、最初の一歩が遠い", skill: "誰にも真似できない世界観づくり" },
+        ENFJ: { saying: "みんなはどう思う？", weak: "全員の面倒を見て、自分が倒れる", skill: "場の空気を一瞬で温める" },
+        ENFP: { saying: "それ、おもしろそう！", weak: "始めた数だけ、終わっていない", skill: "どんな場にも火をつける発想力" },
+        ISTJ: { saying: "前にも言いましたよね", weak: "予定外の一言で、頭が真っ白になる", skill: "期限と約束を絶対に守り切る" },
+        ISFJ: { saying: "私がやっておくから大丈夫", weak: "頼まれると断れず、仕事が増える", skill: "全員の困りごとを先回りで片づける" },
+        ESTJ: { saying: "期限と担当者は？", weak: "雑談にも議事録を取りたくなる", skill: "混乱した現場を一日で立て直す" },
+        ESFJ: { saying: "みんなで集まろうよ！", weak: "誰かの不機嫌を、全部自分のせいにする", skill: "人と人を、気づけばつなぐ" },
+        ISTP: { saying: "まあ、やってみれば分かる", weak: "説明が必要な場面で、黙る", skill: "壊れた物と空気を、無言で直す" },
+        ISFP: { saying: "なんとなく、こっちがいい", weak: "決めるまでが長く、決めたあとも揺れる", skill: "言葉にならない美しさを見つける" },
+        ESTP: { saying: "とりあえず、やってみよう", weak: "説明書は最後まで読まない", skill: "ピンチを度胸でチャンスに変える" },
+        ESFP: { saying: "今、楽しいからOK！", weak: "楽しすぎて、帰る時間を忘れる", skill: "どんな場所も一瞬で宴にする" }
+    };
 
     const DEFAULT_SITUATIONS = [
         { id: "1", name: "通常の酒場での雑談", locked: false },
@@ -330,6 +392,7 @@
     ];
 
     const AXIS_GROUPS = ["EI", "SN", "TF", "JP"];
+    const AXIS_INFO = { EI: ["外向", "内向"], SN: ["現実", "直感"], TF: ["論理", "感情"], JP: ["計画", "柔軟"] };
 
     // ---------- 状態 ----------
     let characters = JSON.parse(JSON.stringify(DEFAULT_CHARACTERS));
@@ -338,8 +401,7 @@
     const unlockedSituations = new Set();
 
     let currentQIndex = 0;
-    let scores = {};
-    let lastPick = {};
+    let axisSum = {}, axisN = {}, axisLast = {}, myBalance = {};   // 軸ごとの合計点・問数・最後に傾いた側、結果のバランス(%)
     let myCalculatedType = "INTJ";
     let currentLimit = 0;
     let adUsed = false;
@@ -354,7 +416,129 @@
         initSituationOptions();
     };
 
+    // ---------- サウンド（Web Audioで合成。音声ファイル不要） ----------
+    // 質問中：BGM / 回答：ピッ / 孵化：殻が割れる音 → 羽化の誕生音。右上のボタンでオン・オフ（端末内に保存）。
+    const SFX = (function () {
+        let ac = null, master = null, bgm = null, bgmTimer = null, bgmNext = 0, on = true, wantBgm = false, noiseBuf = null;
+        try { on = localStorage.getItem('tb_sound') !== '0'; } catch (e) {}
+        const MASTER = 0.55, BGM_LEVEL = 0.5;
+        const BPM = 108, STEP = 60 / BPM / 2, LOOP = STEP * 64;       // 8分音符×64（8小節）
+        const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+        const SEMI = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
+        const midi = n => { const m = /^([A-G])(#?)(\d)$/.exec(n); return 12 * (+m[3] + 1) + SEMI[m[1]] + (m[2] ? 1 : 0); };
+        // 「考え中」っぽい、軽快でちょっととぼけたループ
+        const MEL = ["E5 . G5 . E5 . D5 .", "C5 . D5 E5 . . . .", "G5 . A5 . G5 . E5 .", "D5 . E5 D5 C5 . . .",
+                     "A4 . C5 . D5 . E5 .", "G5 . E5 . D5 . C5 .", "D5 . E5 . G5 . A5 .", "G5 E5 D5 C5 . . . ."];
+        const CHORD = ["C", "C", "F", "G", "A", "F", "G", "C"];
+        const BASS = { C: [48, 55], F: [53, 60], G: [55, 62], A: [57, 64] };
+
+        function ready() { return !!ac && on; }
+        function makeMaster(c) {       // 音が重なっても割れにくくする（大きすぎる音だけ丸めるソフトクリップ）
+            const m = c.createGain(), ws = c.createWaveShaper(), n = 2048, curve = new Float32Array(n), k = 1.4;
+            for (let i = 0; i < n; i++) { const x = i / (n - 1) * 2 - 1; curve[i] = Math.tanh(k * x) / Math.tanh(k); }
+            ws.curve = curve; ws.oversample = "2x";
+            m.gain.value = on ? MASTER : 0; m.connect(ws); ws.connect(c.destination); return m;
+        }
+        function tone(t, f, dur, type, vol, dest, f2) {
+            const o = ac.createOscillator(), g = ac.createGain();
+            o.type = type; o.frequency.setValueAtTime(f, t);
+            if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+            g.gain.setValueAtTime(0.0001, t);
+            g.gain.exponentialRampToValueAtTime(vol, t + 0.008);
+            g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+            o.connect(g); g.connect(dest); o.start(t); o.stop(t + dur + 0.02);
+        }
+        function noise(t, dur, freq, q, vol, dest) {
+            if (!noiseBuf) {
+                noiseBuf = ac.createBuffer(1, Math.floor(ac.sampleRate * 0.5), ac.sampleRate);
+                const d = noiseBuf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+            }
+            const sr = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+            sr.buffer = noiseBuf; f.type = "bandpass"; f.frequency.value = freq; f.Q.value = q;
+            g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+            sr.connect(f); f.connect(g); g.connect(dest); sr.start(t); sr.stop(t + dur + 0.02);
+        }
+        function scheduleLoop(dest, t0) {
+            for (let bar = 0; bar < 8; bar++) {
+                const notes = MEL[bar].split(" "), bass = BASS[CHORD[bar]];
+                for (let st = 0; st < 8; st++) {
+                    const t = t0 + (bar * 8 + st) * STEP;
+                    if (notes[st] !== ".") tone(t, mtof(midi(notes[st])), STEP * 1.6, "square", 0.12, dest);
+                    if (st % 2 === 0) tone(t, mtof(bass[(st / 2) % 2]), STEP * 1.7, "triangle", 0.26, dest);
+                    if (st === 3 || st === 7) noise(t, 0.035, 7000, 1, 0.1, dest);
+                }
+            }
+        }
+        function bgmTick() { if (!bgm || !ac) return; while (bgmNext < ac.currentTime + 3) { scheduleLoop(bgm, bgmNext); bgmNext += LOOP; } }
+        function bgmStart() {
+            wantBgm = true;
+            if (!ready() || bgm) return;
+            bgm = ac.createGain(); const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 3200;
+            bgm.gain.setValueAtTime(0, ac.currentTime); bgm.gain.linearRampToValueAtTime(BGM_LEVEL, ac.currentTime + 0.4);
+            bgm.connect(lp); lp.connect(master); bgm._lp = lp;
+            bgmNext = ac.currentTime + 0.1; bgmTick(); bgmTimer = setInterval(bgmTick, 1000);
+        }
+        function killBgm() {
+            clearInterval(bgmTimer); bgmTimer = null;
+            if (!bgm) return;
+            const g = bgm, lp = g._lp; bgm = null;
+            try { g.gain.cancelScheduledValues(ac.currentTime); g.gain.setValueAtTime(g.gain.value, ac.currentTime); g.gain.linearRampToValueAtTime(0, ac.currentTime + 0.25); } catch (e) {}
+            setTimeout(() => { try { g.disconnect(); lp.disconnect(); } catch (e) {} }, 400);
+        }
+        function updateBtn() { const b = document.getElementById("snd-btn"); if (b) { b.textContent = on ? "🔊" : "🔇"; b.setAttribute("aria-pressed", on ? "false" : "true"); } }
+        const api = {
+            unlock() {      // ユーザーのタップの中で呼ぶ（iPhoneは最初のタップまで音を出せない）
+                try {
+                    if (!ac) {
+                        const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+                        ac = new AC(); master = makeMaster(ac);
+                    }
+                    if (ac.state !== "running") ac.resume();
+                    if (wantBgm && on && !bgm) bgmStart();
+                } catch (e) {}
+            },
+            onScreen(id) { if (id === "screen-quiz") bgmStart(); else { wantBgm = false; killBgm(); } },
+            toggle() {
+                api.unlock(); on = !on;
+                try { localStorage.setItem("tb_sound", on ? "1" : "0"); } catch (e) {}
+                if (master) master.gain.setTargetAtTime(on ? MASTER : 0, ac.currentTime, 0.05);
+                if (!on) killBgm(); else if (wantBgm) bgmStart();
+                updateBtn();
+            },
+            tap(v) {       // 5段階：そう思うほど高く上がり、思わないほど低く下がる
+                if (!ready()) return;
+                const f = { "2": [880, 1100], "1": [740, 840], "0": [587, 587], "-1": [494, 440], "-2": [392, 330] }[String(v)] || [587, 587];
+                tone(ac.currentTime, f[0], 0.08, "square", 0.45, master, f[1] !== f[0] ? f[1] : undefined);
+            },
+            crack(stage) {  // 0=コトッ（揺れ）/ 1〜3=ひびが入る（段階ごとに強く）
+                if (!ready()) return; const t = ac.currentTime;
+                if (stage === 0) { tone(t, 150, 0.11, "sine", 0.45, master, 80); return; }
+                const vol = 0.7 + 0.35 * stage;
+                for (let i = 0; i < stage; i++) {
+                    const tt = t + i * 0.055;
+                    noise(tt, 0.07, 2600 + i * 700 + stage * 300, 0.9, vol, master);
+                    tone(tt, 220, 0.08, "triangle", 0.3, master, 100);
+                }
+                if (stage === 3) noise(t + 0.02, 0.22, 1200, 0.7, 0.5, master);   // 殻がはがれる音
+            },
+            birth() {       // 羽化の瞬間：ぽんっ → きらめき → 上昇アルペジオ → 余韻の和音
+                if (!ready()) return; const t = ac.currentTime;
+                tone(t, 300, 0.18, "sine", 0.5, master, 1000);
+                noise(t, 0.35, 6000, 0.6, 0.9, master);
+                [72, 76, 79, 84, 88, 91].forEach((m, i) => tone(t + 0.1 + i * 0.07, mtof(m), 0.35, "triangle", 0.4, master));
+                [72, 76, 79, 84].forEach(m => tone(t + 0.55, mtof(m), 1.3, "triangle", 0.17, master));
+                [96, 100, 103].forEach((m, i) => tone(t + 0.65 + i * 0.11, mtof(m), 0.25, "sine", 0.14, master));
+            },
+            _test: { useContext(c) { ac = c; on = true; master = makeMaster(c); }, loop(dest, t0) { scheduleLoop(dest, t0); }, LOOP, state() { return { ctx: !!ac, bgm: !!bgm, on, wantBgm, acState: ac && ac.state }; } }
+        };
+        ["touchend", "click", "keydown"].forEach(ev => document.addEventListener(ev, api.unlock, { passive: true }));
+        document.addEventListener("visibilitychange", () => { if (!ac) return; if (document.hidden) ac.suspend(); else if (on) ac.resume(); });
+        updateBtn();
+        return api;
+    })();
+
     function showScreen(screenId) {
+        SFX.onScreen(screenId);
         if (screenId !== 'screen-my-result' && typeof heroTimer !== 'undefined') clearInterval(heroTimer);
         if (screenId !== 'screen-my-result' && typeof hatchTimers !== 'undefined') hatchTimers.forEach(clearTimeout);
         if (screenId !== 'screen-result' && typeof cmpTimer !== 'undefined') clearInterval(cmpTimer);
@@ -455,10 +639,10 @@
 
     // ---------- 診断 ----------
     function startDiagnosis() {
+        SFX.unlock();
         currentQIndex = 0;
         hopNext = "";
-        scores = {};
-        lastPick = {};
+        axisSum = {}; axisN = {}; axisLast = {}; myBalance = {};
         renderQuestion();
         showScreen('screen-quiz');
     }
@@ -486,28 +670,28 @@
     const ETO_ORDER = ["申","酉","戌","亥","子","丑","寅","卯","辰","巳","午","未"];
     // [耳の種類, 耳色, 耳の内側色, しっぽの種類, しっぽ色, 呼び名]
     const ETO = {
-        "子":["rd","#b8b0a8","#ffb0c0","cat","#b8b0a8","ねずみ耳"], "丑":["hn","#e8d9a8","","dog","#7a5a44","牛の角"],
+        "子":["mo","#b8b0a8","#ffb0c0","rat","#b8b0a8","ねずみ耳"], "丑":["hn","#e8d9a8","","dog","#7a5a44","牛の角"],
         "寅":["pt","#f0a050","#ffb0c0","cat","#f0a050","トラ耳"], "卯":["lg","#ffffff","#ffb0c0","puff","#ffffff","うさぎ耳"],
-        "辰":["hn","#e8d9a8","","dra","#6fbf73","竜の角"], "巳":["","","","dra","#7fcf6a","蛇のしっぽ"],
+        "辰":["dr","#e8d9a8","","dra","#6fbf73","竜の角"], "巳":["","","","dra","#7fcf6a","蛇のしっぽ"],
         "午":["pt","#9a6a44","#ffb0c0","dog","#9a6a44","馬の耳"], "未":["fl","#f4f0e6","","puff","#f4f0e6","羊の耳"],
-        "申":["rd","#a8784c","#ffd9b8","cat","#a8784c","サル耳"], "酉":["cb","","","cat","#e0803a","とさか"],
-        "戌":["fl","#8a5a3c","","dog","#b98a5a","犬耳"], "亥":["rd","#b07a5a","#ffb0c0","puff","#f0a8b8","イノシシ耳"]
+        "申":["mk","#a8784c","#ffd9b8","mnk","#a8784c","サル耳"], "酉":["cb","","","cat","#e0803a","とさか"],
+        "戌":["fl","#8a5a3c","","dog","#b98a5a","犬耳"], "亥":["bo","#b07a5a","#ffb0c0","pig","#f0a8b8","イノシシ耳"]
     };
 
     // 胸のブローチ：12星座＋光・闇（5×5ドット）
     const EMB = {
         "牡羊座": [".#.#.","#.#.#","#.#.#","..#..","..#.."], "牡牛座": ["#...#",".###.","#...#","#...#",".###."],
-        "双子座": ["#####",".#.#.",".#.#.",".#.#.","#####"], "蟹座": [".##..","#..#.","..#.#",".#..#","..##."],
-        "獅子座": [".##..","#..#.","#..#.","#...#","...##"], "乙女座": ["#.#.#","#.#.#","#.#.#","#.#.#","..#.."],
+        "双子座": ["#####",".#.#.",".#.#.",".#.#.","#####"], "蟹座": ["#...#",".###.","#####","#.#.#","#...#"],
+        "獅子座": [".###.","#####","#.#.#","##.##",".###."], "乙女座": ["#.#.#","#.#.#","#.#.#","#.#.#","..#.."],
         "天秤座": [".###.","#...#",".....","#####","....."], "蠍座": ["#.#.#","#.#.#","#.#.#","#.#.#","#..##"],
-        "射手座": ["..###","...##","..#.#",".#...","#...."], "山羊座": ["#.#..","#.##.","##..#","#...#",".###."],
+        "射手座": ["..###","...##","..#.#",".#...","#...."], "山羊座": ["#...#","##.##",".###.",".#.#.","..#.."],
         "水瓶座": [".#.#.","#.#.#",".....",".#.#.","#.#.#"], "魚座": ["#...#","#.#.#","#####","#.#.#","#...#"],
         light: ["..#..",".###.","#####",".###.","..#.."], dark: [".###.","#....","#....","#....",".###."]
     };
 
     function heroSvg(c, t, mode, first) {
         const s = { EI: c.t[0], SN: c.t[1], TF: c.t[2], JP: c.t[3] }, z = c.eto, M = [], L = [], A = [];
-        const OL = "#2f2540", SK = "#ffd9b8", HC = "#4a3326", p = t % 4, run = mode === "run", idle = mode === "idle";
+        const OL = "#2f2540", SK = c.skin || "#ffd9b8", HC = c.hair || "#4a3326", p = t % 4, run = mode === "run", idle = mode === "idle";
         const R = (a, x, y, w, h, col) => a.push(`<rect x="${x * 5}" y="${y * 5}" width="${w * 5}" height="${h * 5}" fill="${col}"/>`);
         const dy = idle ? (t % 8 < 4 ? 0 : 1) : (run ? (p % 2 ? -1 : 0) : (p % 2 ? 0 : 1));
         const tun = s.EI === "E" ? "#f2994a" : "#6c7bd9", tun2 = s.EI === "E" ? "#c77626" : "#4c59ad";
@@ -527,9 +711,13 @@
             if (z[3] === "dog") { R(M,22,30,3,2,tc); R(M,24,28+tw,2,3,tc); }
             if (z[3] === "puff") R(M,21,31,3,3,tc);
             if (z[3] === "dra") { R(M,22,33,5,2,tc); R(M,27,32+tw,2,2,tc); }
+            if (z[3] === "rat") { R(M,22,34,3,1,tc); R(M,25,33,2,1,tc); R(M,27,31+tw,1,3,tc); R(M,28,30+tw,1,1,tc); }                       // 細く長いしっぽ
+            if (z[3] === "mnk") { R(M,22,32,3,2,tc); R(M,25,27+tw,2,7,tc); R(M,23,25+tw,3,2,tc); R(M,23,27+tw,1,1,tc); }                      // 高く巻き上がる太いしっぽ
+            if (z[3] === "pig") { R(M,21,32,2,2,tc); R(M,23,31,2,1,tc); R(M,24,32,1,2,tc); R(M,23,34,2,1,tc); }                               // くるんと巻いたしっぽ
         }
         if (c.gender === "f") R(M, 9, 15, 14, 17, HC);
         R(M, 10, 23, 12, 11, OL); R(M, 11, 24, 10, 9, tun); R(M, 11, 31, 10, 2, tun2);
+        R(M, 14, 24, 5, 7, OL); R(M, 13, 25, 7, 5, OL);      // 暗い台座（服の色に埋もれないように）
         (EMB[c.emb] || (c.aura === AUR.dark[1] ? EMB.dark : EMB.light)).forEach((row, i) => { for (let j = 0; j < 5; j++) if (row[j] === "#") R(M, 14 + j, 25 + i, 1, 1, c.aura); });
         let aL = 0, aR = 0; if (mode === "walk") { aL = p === 1 ? 1 : p === 3 ? -1 : 0; aR = -aL; } if (run) { aL = p % 2 ? -2 : 2; aR = -aL; }
         R(M, 9, 25 + aL, 2, 7, tun); R(M, 9, 32 + aL, 2, 2, SK); R(M, 21, 25 + aR, 2, 7, tun); R(M, 21, 32 + aR, 2, 2, SK);
@@ -543,6 +731,10 @@
             if (k === "fl") { R(M,7,12,3,8,e1); R(M,22,12,3,8,e1); }
             if (k === "hn") { R(M,10,7,2,4,e1); R(M,20,7,2,4,e1); R(M,10,6,1,1,e1); R(M,21,6,1,1,e1); }
             if (k === "rd") { R(M,8,10,3,3,e1); R(M,21,10,3,3,e1); R(M,9,11,1,1,e2); R(M,22,11,1,1,e2); }
+            if (k === "mo") { [[7, 22]].forEach(() => { R(M,6,7,5,5,e1); R(M,7,8,3,3,e2); R(M,21,7,5,5,e1); R(M,22,8,3,3,e2); }); }   // 大きな丸耳
+            if (k === "mk") { R(M,7,13,3,5,e1); R(M,8,14,1,3,e2); R(M,22,13,3,5,e1); R(M,23,14,1,3,e2); R(M,13,8,6,2,e1); }          // 目の高さの耳＋おでこの毛
+            if (k === "bo") { R(M,9,8,3,3,e1); R(M,10,9,1,1,e2); R(M,20,8,3,3,e1); R(M,21,9,1,1,e2); }                                 // 小さな三角耳
+            if (k === "dr") { R(M,10,6,2,5,e1); R(M,8,5,2,2,e1); R(M,20,6,2,5,e1); R(M,22,5,2,2,e1); R(M,9,3,1,2,e1); R(M,22,3,1,2,e1); } // 枝分かれした角
             if (k === "cb") { R(M,14,6,4,3,"#e0403a"); R(M,15,5,2,1,"#e0403a"); }
         }
         R(M, 10, 9, 12, 1, OL); R(M, 9, 10, 14, 5, HC);
@@ -551,6 +743,8 @@
         if (t % 20 === 0 && !idle || t % 24 === 0) { R(M,12,19,2,1,OL); R(M,18,19,2,1,OL); } else { R(M,12,17,2,3,OL); R(M,18,17,2,3,OL); R(M,12,17,1,1,"#fff"); R(M,18,17,1,1,"#fff"); }
         const ck = c.gender === "f" ? "#ff8fa3" : "#ffa6a6"; R(M,11,20,2,1,ck); R(M,19,20,2,1,ck);
         if (s.EI === "E") R(M,15,21,2,2,"#7a2a3a"); else R(M,15,21,2,1,OL);
+        if (z && z[0] === "bo") { R(M,14,20,4,3,"#f0a0b0"); R(M,15,21,1,1,OL); R(M,16,21,1,1,OL); R(M,12,22,1,2,"#ffffff"); R(M,19,22,1,2,"#ffffff"); }
+        if (z && z[0] === "mo") { const wc = "#8a8a98"; R(M,6,19,4,1,wc); R(M,6,21,4,1,wc); R(M,22,19,4,1,wc); R(M,22,21,4,1,wc); }
         if (s.TF === "T") { const g = "#3b6fd8"; R(M,11,16,4,1,g); R(M,11,20,4,1,g); R(M,11,16,1,5,g); R(M,14,16,1,5,g); R(M,17,16,4,1,g); R(M,17,20,4,1,g); R(M,17,16,1,5,g); R(M,20,16,1,5,g); R(M,15,17,2,1,g); R(M,23,20,1,20,"#8a5a3c"); R(M,22,16,3,4,"#5aa7ff"); }
         if (s.TF === "F") { const hc = "#f0507a"; R(M,24,6,2,1,hc); R(M,27,6,2,1,hc); R(M,24,7,5,1,hc); R(M,25,8,3,1,hc); R(M,26,9,1,1,hc); }
         if (s.JP === "J") { const hp = "#6b4fd8"; R(M,15,2,2,2,hp); R(M,13,4,6,2,hp); R(M,12,6,8,2,hp); R(M,11,8,10,1,"#ffd34e"); R(M,8,9,16,2,"#523ac0"); }
@@ -598,12 +792,17 @@
         g.imageSmoothingEnabled = false;
         if (kind === "my") {
             const d = shareData.my;
-            cardBase(g, W, H, 780);
-            g.drawImage(await svgToImage(heroSvg(d.cfg, 0, "idle", false)), 300, 200, 480, 660);
-            g.fillStyle = "#ffffff"; g.font = `bold 56px ${F}`;
-            let y = wrapText(g, d.title, W / 2, 1040, 900, 70, 2);
+            cardBase(g, W, H, 700);
+            g.drawImage(await svgToImage(heroSvg(d.cfg, 0, "idle", false)), 300, 212, 480, 660);
+            g.fillStyle = "#ffffff";
+            let fs = 56; g.font = `bold ${fs}px ${F}`;
+            while (fs > 40 && g.measureText(d.title).width > 900) { fs -= 2; g.font = `bold ${fs}px ${F}`; }   // 長いタイトルは文字を小さくして1行に収める
+            let y = wrapText(g, d.title, W / 2, 960, 900, Math.round(fs * 1.25), 2);
             g.font = `40px ${F}`; g.fillStyle = "#ffd34e"; g.fillText(`${d.type}　${d.className}`, W / 2, y + 20);
-            g.font = `32px ${F}`; g.fillStyle = "#b8b8c8"; g.fillText(d.extra, W / 2, y + 76);
+            g.font = `32px ${F}`; g.fillStyle = "#b8b8c8"; g.fillText(d.extra, W / 2, y + 72);
+            let yy = y + 132;
+            if (d.saying) { g.font = `bold 34px ${F}`; g.fillStyle = "#ffffff"; yy = wrapText(g, `口癖「${d.saying}」`, W / 2, yy, 900, 44, 2) + 4; }
+            if (d.weak && yy + 40 <= 1296) { g.font = `32px ${F}`; g.fillStyle = "#ff9b9b"; wrapText(g, `弱点：${d.weak}`, W / 2, yy, 900, 42, 1); }
         } else {
             const d = shareData.compat;
             cardBase(g, W, H, 540);
@@ -657,12 +856,14 @@
         hatchTimers.forEach(clearTimeout); hatchTimers = [];
         clearInterval(heroTimer);
         const el = document.getElementById('my-char'), stg = document.getElementById('hatch-stage');
-        if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) { startHero(); return; }
+        if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) { SFX.birth(); startHero(); return; }
         [0, 1, 2, 3].forEach(s => hatchTimers.push(setTimeout(() => {
             el.innerHTML = `<div class="${s >= 2 ? "shake2" : "shake"}">${eggSvg(s, "")}</div>`;
+            SFX.crack(s);
         }, s * 450)));
         hatchTimers.push(setTimeout(() => {
             stg.classList.add("flashing");
+            SFX.birth();
             startHero();
             hatchTimers.push(setTimeout(() => stg.classList.remove("flashing"), 700));
         }, 1900));
@@ -673,8 +874,12 @@
         const ms = [["", "答えたくない"]]; for (let m = 1; m <= 12; m++) ms.push([m, m + "月"]);
         const ds = [["", "答えたくない"]]; for (let d = 1; d <= 31; d++) ds.push([d, d + "日"]);
         fill("p-year", ys); fill("p-month", ms); fill("p-day", ds);
+        // キャラの見た目の色（未選択なら標準の見た目）
+        fill("p-hair", [["", "答えたくない"], ["#26222e", "⬛ 黒"], ["#8f5c36", "🟫 栗色"], ["#e8c04a", "🟨 金"], ["#c8403a", "🟥 赤"], ["#3f6fd0", "🟦 青"], ["#f08ab0", "🩷 ピンク"], ["#c8ccd8", "⬜ 銀"]]);
+        fill("p-skin", [["", "答えたくない"], ["#ffe8d6", "明るい"], ["#ffd9b8", "ふつう"], ["#e8b78a", "小麦色"], ["#c08a5c", "褐色"], ["#8d5a3c", "深い褐色"]]);
     }
     function hatch() {
+        SFX.unlock();
         const v = id => document.getElementById(id).value;
         const y = +v("p-year"), m = +v("p-month");
         const d = m ? Math.min(+v("p-day"), new Date(2000, m, 0).getDate()) : 0;
@@ -683,11 +888,11 @@
         const eto = y ? ETO_ORDER[y % 12] : null;
         const au = AUR[sg ? sg[2] : (LIGHT_TYPES.includes(t) ? "light" : "dark")];
         const emb = sg ? sg[0] : (LIGHT_TYPES.includes(t) ? "light" : "dark");
-        heroCfg = { t, blood: v("p-blood"), gender: v("p-gender"), aura: au[1], emb, eto: eto ? ETO[eto] : null };
+        heroCfg = { t, blood: v("p-blood"), gender: v("p-gender"), hair: v("p-hair"), skin: v("p-skin"), aura: au[1], emb, eto: eto ? ETO[eto] : null };
         const cn = (characters[t] || { name: "" }).name;
         document.getElementById('my-title').innerText = `${au[0]}をまとう ${eto ? ETO[eto][5] + "の " : ""}${cn}`;
         document.getElementById('my-extra').innerText = `${sg ? sg[1] + " " + sg[0] : "星座は秘密"}／${au[0]}属性${eto ? "／" + eto + "年" : ""}`;
-        shareData.my = { type: t, className: cn, title: document.getElementById('my-title').innerText, extra: document.getElementById('my-extra').innerText, cfg: heroCfg };
+        shareData.my = { saying: (PROFILE[t] || {}).saying, weak: (PROFILE[t] || {}).weak, type: t, className: cn, title: document.getElementById('my-title').innerText, extra: document.getElementById('my-extra').innerText, cfg: heroCfg };
         showScreen('screen-my-result');
         playHatch();
     }
@@ -705,13 +910,19 @@
         hopNext = "";
     }
 
-    function answerQuestion(isYes) {
+    // v: +2 そう思う / +1 ややそう思う / 0 どちらとも / -1 あまり思わない / -2 そう思わない
+    function answerQuestion(v) {
         const q = questions[currentQIndex];
-        const picked = isYes ? q.pos : q.neg;
-        scores[picked] = (scores[picked] || 0) + 1;
-        const group = AXIS_GROUPS.find(g => g.includes(q.pos));
-        lastPick[group] = picked;          // 同点のとき「最後に選んだ側」を採用
-        hopNext = isYes ? "hopL" : "hopR";
+        v = Math.max(-2, Math.min(2, Math.round(+v || 0)));
+        SFX.tap(v);
+        const g = AXIS_GROUPS.find(x => x.includes(q.pos));
+        if (g) {
+            const d = q.pos === g[0] ? v : -v;          // g[0]側に傾くほどプラス
+            axisSum[g] = (axisSum[g] || 0) + d;
+            axisN[g] = (axisN[g] || 0) + 1;
+            if (d !== 0) axisLast[g] = d > 0 ? g[0] : g[1];   // 同点のとき「最後に傾いた側」を採用
+        }
+        hopNext = v > 0 ? "hopL" : v < 0 ? "hopR" : "pop";
 
         currentQIndex++;
         if (currentQIndex < questions.length) {
@@ -722,19 +933,33 @@
     }
 
     function calculateTypeResult() {
-        // 各軸: 得点が多い方。同点なら最後に選んだ方（常に同じ側に偏らない）
-        const pick = g => {
-            const a = scores[g[0]] || 0, b = scores[g[1]] || 0;
-            return a === b ? (lastPick[g] || g[0]) : (a > b ? g[0] : g[1]);
-        };
-        myCalculatedType = AXIS_GROUPS.map(pick).join("");
+        // 各軸: 合計点が傾いた側。ちょうど0なら最後に傾いた側（なければ先頭の文字）
+        myBalance = {};
+        myCalculatedType = AXIS_GROUPS.map(g => {
+            const sum = axisSum[g] || 0, n = axisN[g] || 0;
+            myBalance[g] = n ? Math.max(5, Math.min(95, Math.round(50 + sum / (2 * n) * 50))) : 50;   // g[0]側の割合(%)
+            return sum === 0 ? (axisLast[g] || g[0]) : (sum > 0 ? g[0] : g[1]);
+        }).join("");
         const charInfo = characters[myCalculatedType] || characters["INTJ"];
+        const pf = PROFILE[myCalculatedType] || {};
 
         document.getElementById('my-type-code').innerText = myCalculatedType;
         document.getElementById('my-class-name').innerText = charInfo.name;
         document.getElementById('my-catch').innerText = charInfo.catch;
+        document.getElementById('my-saying').innerText = pf.saying ? `「${pf.saying}」` : "—";
+        document.getElementById('my-weak').innerText = pf.weak || "—";
+        document.getElementById('my-skill').innerText = pf.skill || "—";
+        renderBalance();
 
         showScreen('screen-profile');
+    }
+
+    function renderBalance() {
+        const rows = AXIS_GROUPS.map(g => {
+            const p = myBalance[g] != null ? myBalance[g] : 50, [a, b] = AXIS_INFO[g];
+            return `<div class="bal-row"><div class="bal-l"><span>${a}(${g[0]}) ${p}%</span><span>${100 - p}% ${b}(${g[1]})</span></div><div class="bal"><i style="width:${p}%"></i></div></div>`;
+        }).join("");
+        document.getElementById('my-balance').innerHTML = `<div class="bal-t">性格バランス</div>${rows}`;
     }
 
     function goToCompatWithMyType() {
