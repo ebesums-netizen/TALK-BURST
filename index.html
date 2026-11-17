@@ -185,6 +185,11 @@
         .scale button.d1:active { background: #8c9ae0; } .scale button.d2:active { background: #5a6fc8; }
         .scale-lab { display: flex; justify-content: space-between; font-size: 0.72rem; color: #9a9ab0; margin: 2px 2px 0; }
         /* 性格バランス */
+        .sub { font-size: 0.75rem; color: var(--text-sub); }
+        #typeA, #typeB { font-size: clamp(12px, 3.7vw, 16px); }   /* 長い職種名がはみ出さないよう、画面幅に合わせて小さくする */
+        #my-title, #my-class-name { word-break: keep-all; overflow-wrap: anywhere; }   /* 称号・職種名は、スペースや「・」の位置で改行する */
+        .disclaimer { font-size: 0.7rem; color: #7b7b92; line-height: 1.5; margin: 18px 4px 0; }
+        #screen-quiz.active ~ .disclaimer { display: none; }
         .bal-box { margin-top: 10px; padding-top: 8px; border-top: 1px dashed #3a3a4e; }
         .bal-t { font-size: 0.8rem; color: #9a9ab0; margin-bottom: 4px; }
         .bal-row { margin: 8px 0; }
@@ -260,7 +265,9 @@
         <div class="result-box">
             <p><strong>称号:</strong> <span id="my-title" style="font-weight: bold;"></span></p>
             <p><strong>タイプ:</strong> <span id="my-type-code" class="my-type-badge"></span></p>
-            <p><strong>ギルド職種:</strong> <span id="my-class-name" style="font-size: 1.2rem; font-weight: bold;"></span></p>
+            <p><strong>種族:</strong> <span id="my-race"></span></p>
+            <p><strong>ギルド職種:</strong> <span id="my-class-name" style="font-size: 1.2rem; font-weight: bold;"></span> <span id="my-axis-note" class="sub"></span></p>
+            <p><strong>副業:</strong> <span id="my-side"></span></p>
             <p><strong>特徴:</strong> <span id="my-catch"></span></p>
             <p><strong>口癖:</strong> <span id="my-saying"></span></p>
             <p><strong>弱点:</strong> <span id="my-weak"></span></p>
@@ -313,6 +320,8 @@
         <button class="btn-secondary" onclick="window.open(xUrl('compat'),'_blank')">𝕏 に文章だけ投稿</button>
         <button style="margin-top: 8px;" onclick="showScreen('screen-compat')">別のペアを査定する</button>
     </div>
+
+    <p class="disclaimer">※ このアプリはエンターテインメント目的の独自診断です。公式の性格検査・心理検査とは関係がなく、結果は公式の検査結果と異なる場合があります。診断結果の科学的・心理学的な正確さを保証するものではありません。</p>
 </div>
 
 <script>
@@ -340,6 +349,38 @@
         "ESTP": { name: "疾風の起業家", catch: "行動・瞬発・社交" },
         "ESFP": { name: "吟遊詩人", catch: "明るさ・柔軟・社交" }
     };
+
+    // ---------- 職種64個・副業・種族（内蔵の予備データ。スプレッドシートの Jobs / SideJobs / Races で上書きできる） ----------
+    // 職種: 診断タイプ(16)×「一番はっきり出た軸」(4)＝64個。並びは [外向/内向, 現実/直感, 論理/感情, 計画/柔軟] の軸の順。
+    const JOBS = {
+        "INTJ": ["しゃべらない策士", "未来しか見ていない軍師", "逃げ足の速い天才軍師", "計画表に住んでいる参謀"],
+        "INTP": ["地下室の研究員", "空想図書館の司書", "調べ物から帰らない大賢者", "締め切りを知らない魔導士"],
+        "ENTJ": ["部下が追いつけない総大将", "野望だけ巨大な城主", "感情を置いてきた将軍", "工程表で戦う総督"],
+        "ENTP": ["インチキマジシャン", "設計図のない発明家", "揚げ足取りの魔術師", "その場しのぎの魔法使い"],
+        "INFJ": ["水晶玉に話しかける占い師", "星の国のマジシャン", "察しすぎて疲れる巫女", "予言を手帳に書く預言者"],
+        "INFP": ["精霊としか話せない語り部", "妄想が止まらない物語師", "優しすぎて戦えない癒し手", "夢の中に住む旅人"],
+        "ENFJ": ["世話を焼きすぎる勇者", "理想を語りすぎる伝道師", "全員の味方をする盾役", "段取り命の救世主"],
+        "ENFP": ["誰にでも話しかける旅芸人", "思いつきで動く魔女", "情熱だけで突っ走る剣士", "飽きっぽい精霊使い"],
+        "ISTJ": ["返事が遅い門番", "前例を読み上げる書記官", "規則を暗唱する裁判官", "役立たずのエリート騎士"],
+        "ISFJ": ["目立たず世話を焼く従者", "備蓄に命を懸ける補給係", "断れない聖騎士", "約束を死守する執事"],
+        "ESTJ": ["口うるさい鉄の隊長", "現場を仕切る鬼軍曹", "雑談の議事録を取る書記長", "ルールブックの番人"],
+        "ESFJ": ["勝手に幹事をやる司会者", "差し入れ担当の炊き出し隊", "誕生日を忘れない世話役", "集合時間に厳しい案内人"],
+        "ISTP": ["無口な魔導修理工", "工具箱を手放さない職人", "とりあえず分解する技師", "気が向いたら直す便利屋"],
+        "ISFP": ["人見知りの放浪画家", "色にうるさい染物師", "傷つきやすい竪琴弾き", "気分屋の吟遊詩人"],
+        "ESTP": ["声がでかい行商人", "現場で全部決める傭兵", "損得で動く交易商", "説明書を読まない商人"],
+        "ESFP": ["バカ舌の美食家", "食べ歩きが本業の旅人", "宴を盛り上げる踊り子", "後先考えない道化師"]
+    };
+    // 基本の職種（相性画面・相性文で使う名前）が、上の配列の何番目か
+    const BASE_AXIS = { "INTJ": 2, "INTP": 2, "ENTJ": 0, "ENTP": 0, "INFJ": 1, "INFP": 0, "ENFJ": 0, "ENFP": 3, "ISTJ": 3, "ISFJ": 2, "ESTJ": 0, "ESFJ": 0, "ISTP": 0, "ISFP": 3, "ESTP": 3, "ESFP": 0 };
+    // 副業: 星座で決まる（星座を答えない人は NO_SIDE_JOB）
+    const SIDE_JOBS = { "牡羊座": "突撃の出前持ち", "牡牛座": "頑固なパン屋", "双子座": "噂話の拡声係", "蟹座": "深夜の食堂店主", "獅子座": "自称・看板役者", "乙女座": "重箱の隅の校正係", "天秤座": "決められない両替商", "蠍座": "こっそり探偵", "射手座": "迷子の旅芸人", "山羊座": "コツコツ内職職人", "水瓶座": "謎の発明助手", "魚座": "夢を売る露天商" };
+    const NO_SIDE_JOB = "ギルドの規則で禁止中";
+    // 種族: 生まれ年の干支で決まる（干支を答えない人は RACE_DEFAULT）
+    const RACE_NAMES = { "子": "鼠人", "丑": "牛人", "寅": "虎人", "卯": "兎人", "辰": "竜人", "巳": "蛇人", "午": "馬人", "未": "羊人", "申": "猿人", "酉": "鳥人", "戌": "犬人", "亥": "猪人" };
+    const RACE_DEFAULT = "人族";
+    // 性別の記号（答えない場合は表示なし）
+    const GENDER_SYM = { m: "♂", f: "♀", n: "◇" };
+    Object.keys(DEFAULT_CHARACTERS).forEach(t => { DEFAULT_CHARACTERS[t].name = JOBS[t][BASE_AXIS[t]]; });
 
     // pos = 「そう思う」で加点される側 / neg = 「そう思わない」で加点される側（シートの weight_positive / weight_negative と同じ意味）
     // 各軸4問。軸ごとに2問ずつ逆向きにして、回答のクセで偏らないようにしている。
@@ -396,6 +437,10 @@
 
     // ---------- 状態 ----------
     let characters = JSON.parse(JSON.stringify(DEFAULT_CHARACTERS));
+    let jobs = JSON.parse(JSON.stringify(JOBS)), baseAxis = Object.assign({}, BASE_AXIS);
+    let sideJobs = Object.assign({}, SIDE_JOBS), noSideJob = NO_SIDE_JOB, raceNames = Object.assign({}, RACE_NAMES), raceDefault = RACE_DEFAULT;
+    const PROFILE_DEFAULT = JSON.parse(JSON.stringify(PROFILE));
+    let myAxisIdx = 0, myJob = "";
     let questions = DEFAULT_QUESTIONS.slice();
     let situations = DEFAULT_SITUATIONS.slice();
     const unlockedSituations = new Set();
@@ -433,6 +478,9 @@
         const BASS = { C: [48, 55], F: [53, 60], G: [55, 62], A: [57, 64] };
 
         function ready() { return !!ac && on; }
+        // iPhoneはWebAudioがマナーモード（サイドスイッチ）で消されるため、「再生用の音声」として扱わせる（iOS 17以降）。対応していない端末では何もしない。
+        function playbackSession() { try { if ("audioSession" in navigator) navigator.audioSession.type = "playback"; } catch (e) {} }
+        playbackSession();
         function makeMaster(c) {       // 音が重なっても割れにくくする（大きすぎる音だけ丸めるソフトクリップ）
             const m = c.createGain(), ws = c.createWaveShaper(), n = 2048, curve = new Float32Array(n), k = 1.4;
             for (let i = 0; i < n; i++) { const x = i / (n - 1) * 2 - 1; curve[i] = Math.tanh(k * x) / Math.tanh(k); }
@@ -493,7 +541,9 @@
                         const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
                         ac = new AC(); master = makeMaster(ac);
                     }
+                    playbackSession();
                     if (ac.state !== "running") ac.resume();
+                    try { const sb = ac.createBufferSource(); sb.buffer = ac.createBuffer(1, 1, 22050); sb.connect(ac.destination); sb.start(0); } catch (e) {}   // 無音を1回鳴らして解禁
                     if (wantBgm && on && !bgm) bgmStart();
                 } catch (e) {}
             },
@@ -502,7 +552,7 @@
                 api.unlock(); on = !on;
                 try { localStorage.setItem("tb_sound", on ? "1" : "0"); } catch (e) {}
                 if (master) master.gain.setTargetAtTime(on ? MASTER : 0, ac.currentTime, 0.05);
-                if (!on) killBgm(); else if (wantBgm) bgmStart();
+                if (!on) killBgm(); else { if (wantBgm) bgmStart(); api.tap(2); }
                 updateBtn();
             },
             tap(v) {       // 5段階：そう思うほど高く上がり、思わないほど低く下がる
@@ -559,29 +609,73 @@
         }
     }
 
+    // 前回読み込んだ内容を端末に保存しておき、次の起動では待たずに使う（シートの変更は次の起動から反映）
+    const MASTER_CACHE_KEY = "tb_master_v1";
     async function loadMasterData() {
+        try {
+            const c = JSON.parse(localStorage.getItem(MASTER_CACHE_KEY) || "null");
+            if (c && c.v === 1 && c.data) applyMasterData(c.data);
+        } catch (e) {}
         try {
             const d = await gasFetch({ action: "getBootstrap" });
             if (!d || d.status === "error") throw new Error(d && d.message || "bootstrap failed");
             applyMasterData(d);
+            try { localStorage.setItem(MASTER_CACHE_KEY, JSON.stringify({ v: 1, t: Date.now(), data: d })); } catch (e) {}
         } catch (e) {
-            console.warn("マスターデータ取得失敗。内蔵データで動作します:", e);
+            console.warn("マスターデータ取得失敗。保存済みまたは内蔵のデータで動作します:", e);
         }
     }
 
-    // シートの内容を検証してから採用（不完全なら内蔵データを維持）
+    function resetMaster() {
+        characters = JSON.parse(JSON.stringify(DEFAULT_CHARACTERS));
+        jobs = JSON.parse(JSON.stringify(JOBS)); baseAxis = Object.assign({}, BASE_AXIS);
+        sideJobs = Object.assign({}, SIDE_JOBS); noSideJob = NO_SIDE_JOB; raceNames = Object.assign({}, RACE_NAMES); raceDefault = RACE_DEFAULT;
+        for (const k in PROFILE_DEFAULT) PROFILE[k] = Object.assign({}, PROFILE_DEFAULT[k]);
+        questions = DEFAULT_QUESTIONS.slice(); situations = DEFAULT_SITUATIONS.slice();
+    }
+
+    // シートの内容を検証してから採用（空欄・長すぎる・禁止語を含む行は読み飛ばし、内蔵データを維持）
+    const BAD_WORDS = /MBTI|Myers|Briggs|マイヤーズ|ブリッグス/i;     // 他社の商標を、うっかりシートに書いても画面に出さない
+    const cleanText = (v, max) => { const t = String(v == null ? "" : v).trim(); return (t && t.length <= max && !BAD_WORDS.test(t)) ? t : ""; };
+    const isYes = v => ["TRUE", "1", "YES", "○", "★", "はい"].includes(String(v == null ? "" : v).trim().toUpperCase());
+    const typeCodeOf = r => String(r.type_code || r.mbti_type || "").trim().toUpperCase();
     function applyMasterData(d) {
-        if (Array.isArray(d.characters)) {
+        resetMaster();
+        if (Array.isArray(d.characters)) {      // 特徴（catch_phrase）の上書きのみ。職種名は Jobs シートで管理
             d.characters.forEach(r => {
-                const code = String(r.mbti_type || "").trim().toUpperCase();
-                if (characters[code] && r.class_name) {
-                    characters[code] = {
-                        name: String(r.class_name),
-                        catch: r.catch_phrase ? String(r.catch_phrase) : characters[code].catch
-                    };
-                }
+                const code = typeCodeOf(r), c = cleanText(r.catch_phrase, 30);
+                if (characters[code] && c) characters[code].catch = c;
             });
         }
+        if (Array.isArray(d.jobs)) {
+            d.jobs.forEach(r => {
+                const code = typeCodeOf(r), a = String(r.axis || "").trim().toUpperCase(), name = cleanText(r.job_name, 20);
+                const idx = AXIS_GROUPS.findIndex(g => g === a || (a.length === 1 && g.includes(a)));
+                if (jobs[code] && idx >= 0 && name) { jobs[code][idx] = name; if (isYes(r.is_base)) baseAxis[code] = idx; }
+            });
+        }
+        if (Array.isArray(d.sideJobs)) {
+            d.sideJobs.forEach(r => {
+                const sign = String(r.sign || "").trim(), name = cleanText(r.side_job, 20);
+                if (!name) return;
+                if (sign === "なし") noSideJob = name; else if (sideJobs[sign] !== undefined) sideJobs[sign] = name;
+            });
+        }
+        if (Array.isArray(d.races)) {
+            d.races.forEach(r => {
+                const k = String(r.eto || "").trim(), name = cleanText(r.race_name, 10);
+                if (!name) return;
+                if (k === "なし") raceDefault = name; else if (raceNames[k] !== undefined) raceNames[k] = name;
+            });
+        }
+        if (Array.isArray(d.profiles)) {
+            d.profiles.forEach(r => {
+                const code = typeCodeOf(r);
+                if (!PROFILE[code]) return;
+                ["saying", "weak", "skill"].forEach(f => { const v = cleanText(r[f], 40); if (v) PROFILE[code][f] = v; });
+            });
+        }
+        Object.keys(characters).forEach(t => { characters[t].name = jobs[t][baseAxis[t]]; });   // 相性画面で使う基本の職種名
         if (Array.isArray(d.questions)) {
             const valid = d.questions
                 .filter(r => r.question_text && r.weight_positive && r.weight_negative)
@@ -672,7 +766,7 @@
     const ETO = {
         "子":["mo","#b8b0a8","#ffb0c0","rat","#b8b0a8","ねずみ耳"], "丑":["hn","#e8d9a8","","dog","#7a5a44","牛の角"],
         "寅":["pt","#f0a050","#ffb0c0","cat","#f0a050","トラ耳"], "卯":["lg","#ffffff","#ffb0c0","puff","#ffffff","うさぎ耳"],
-        "辰":["dr","#e8d9a8","","dra","#6fbf73","竜の角"], "巳":["","","","dra","#7fcf6a","蛇のしっぽ"],
+        "辰":["dr","#d8bd62","","dra","#6fbf73","竜の角"], "巳":["","","","dra","#7fcf6a","蛇のしっぽ"],
         "午":["pt","#9a6a44","#ffb0c0","dog","#9a6a44","馬の耳"], "未":["fl","#f4f0e6","","puff","#f4f0e6","羊の耳"],
         "申":["mk","#a8784c","#ffd9b8","mnk","#a8784c","サル耳"], "酉":["cb","","","cat","#e0803a","とさか"],
         "戌":["fl","#8a5a3c","","dog","#b98a5a","犬耳"], "亥":["bo","#b07a5a","#ffb0c0","pig","#f0a8b8","イノシシ耳"]
@@ -764,6 +858,14 @@
             img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg.replace("<svg ", '<svg xmlns="http://www.w3.org/2000/svg" '));
         });
     }
+    // 解説文を、できるだけ大きい文字（30〜26px）で5行以内に収める（収まらなければ26pxで6行）
+    function linesNeeded(g, text, maxW) { let n = 1, w = 0; for (const ch of text) { const cw = g.measureText(ch).width; if (w + cw > maxW && w > 0) { n++; w = cw; } else w += cw; } return n; }
+    function compatTextLayout(g, text, F) {
+        let cf = 30;
+        for (; cf > 26; cf -= 2) { g.font = `${cf}px ${F}`; if (linesNeeded(g, text, 900) <= 5) break; }
+        g.font = `${cf}px ${F}`;
+        return { cf, lh: Math.round(cf * 1.46), n: linesNeeded(g, text, 900) };
+    }
     function wrapText(g, text, x, y, maxW, lh, maxLines) {
         let line = "", n = 0;
         for (const ch of text) {
@@ -796,10 +898,10 @@
             g.drawImage(await svgToImage(heroSvg(d.cfg, 0, "idle", false)), 300, 212, 480, 660);
             g.fillStyle = "#ffffff";
             let fs = 56; g.font = `bold ${fs}px ${F}`;
-            while (fs > 40 && g.measureText(d.title).width > 900) { fs -= 2; g.font = `bold ${fs}px ${F}`; }   // 長いタイトルは文字を小さくして1行に収める
+            while (fs > 34 && g.measureText(d.title).width > 900) { fs -= 2; g.font = `bold ${fs}px ${F}`; }   // 長いタイトルは文字を小さくして1行に収める
             let y = wrapText(g, d.title, W / 2, 960, 900, Math.round(fs * 1.25), 2);
-            g.font = `40px ${F}`; g.fillStyle = "#ffd34e"; g.fillText(`${d.type}　${d.className}`, W / 2, y + 20);
-            g.font = `32px ${F}`; g.fillStyle = "#b8b8c8"; g.fillText(d.extra, W / 2, y + 72);
+            g.font = `38px ${F}`; g.fillStyle = "#ffd34e"; g.fillText(`${d.type}　${d.extra}`, W / 2, y + 20);
+            g.font = `bold 32px ${F}`; g.fillStyle = "#6ee7b7"; g.fillText(`副業：${d.sideJob}`, W / 2, y + 72);
             let yy = y + 132;
             if (d.saying) { g.font = `bold 34px ${F}`; g.fillStyle = "#ffffff"; yy = wrapText(g, `口癖「${d.saying}」`, W / 2, yy, 900, 44, 2) + 4; }
             if (d.weak && yy + 40 <= 1296) { g.font = `32px ${F}`; g.fillStyle = "#ff9b9b"; wrapText(g, `弱点：${d.weak}`, W / 2, yy, 900, 42, 1); }
@@ -810,12 +912,16 @@
             g.drawImage(await svgToImage(heroSvg(cfg(d.a), 0, "idle", false)), 130, 190, 384, 528);
             const imgB = await svgToImage(heroSvg(cfg(d.b), 0, "idle", false));
             g.save(); g.translate(950, 0); g.scale(-1, 1); g.drawImage(imgB, 0, 190, 384, 528); g.restore();
-            g.fillStyle = "#ffffff"; g.font = `bold 42px ${F}`; g.fillText(`${d.nameA} × ${d.nameB}`, W / 2, 800);
+            g.fillStyle = "#ffffff";
+            const pair = `${d.nameA} × ${d.nameB}`; let nf = 42; g.font = `bold ${nf}px ${F}`;
+            while (nf > 26 && g.measureText(pair).width > 980) { nf -= 2; g.font = `bold ${nf}px ${F}`; }   // 長い職種名は文字を小さくして1行に収める
+            g.fillText(pair, W / 2, 800);
             g.fillStyle = "#b8b8c8"; g.font = `28px ${F}`; g.fillText(d.sitName, W / 2, 846);
             g.fillStyle = "#ff6b6b"; g.font = `bold 86px ${F}`; g.fillText(`限界会話時間 ${currentLimit}分`, W / 2, 950);
-            g.textAlign = "left"; g.fillStyle = "#ffffff"; g.font = `30px ${F}`;
-            const y = wrapText(g, d.comment, 90, 1018, 900, 44, 6);
-            g.textAlign = "center"; g.fillStyle = "#6ee7b7"; g.font = `28px ${F}`; g.fillText(`特効薬: ${d.item}`, W / 2, Math.min(y + 14, 1300));
+            g.textAlign = "left"; g.fillStyle = "#ffffff";
+            const lay = compatTextLayout(g, d.comment, F);
+            const y = wrapText(g, d.comment, 90, 1018, 900, lay.lh, 6);
+            g.textAlign = "center"; g.fillStyle = "#6ee7b7"; g.font = `28px ${F}`; g.fillText(`特効薬: ${d.item}`, W / 2, Math.min(y + 12, 1288));
         }
         g.textAlign = "center"; g.fillStyle = "#8888a0"; g.font = `26px ${F}`; g.fillText(HASH, W / 2, 1316);
         return c;
@@ -889,10 +995,14 @@
         const au = AUR[sg ? sg[2] : (LIGHT_TYPES.includes(t) ? "light" : "dark")];
         const emb = sg ? sg[0] : (LIGHT_TYPES.includes(t) ? "light" : "dark");
         heroCfg = { t, blood: v("p-blood"), gender: v("p-gender"), hair: v("p-hair"), skin: v("p-skin"), aura: au[1], emb, eto: eto ? ETO[eto] : null };
-        const cn = (characters[t] || { name: "" }).name;
-        document.getElementById('my-title').innerText = `${au[0]}をまとう ${eto ? ETO[eto][5] + "の " : ""}${cn}`;
+        const job = myJob || (characters[t] || { name: "" }).name;
+        const race = eto ? (raceNames[eto] || raceDefault) : raceDefault;
+        const side = sg ? (sideJobs[sg[0]] || noSideJob) : noSideJob;
+        document.getElementById('my-title').innerText = `${au[0]}をまとう ${race}${GENDER_SYM[v("p-gender")] || ""}・${job}`;
+        document.getElementById('my-race').innerText = eto ? `${race}（${eto}年生まれ）` : race;
+        document.getElementById('my-side').innerText = side;
         document.getElementById('my-extra').innerText = `${sg ? sg[1] + " " + sg[0] : "星座は秘密"}／${au[0]}属性${eto ? "／" + eto + "年" : ""}`;
-        shareData.my = { saying: (PROFILE[t] || {}).saying, weak: (PROFILE[t] || {}).weak, type: t, className: cn, title: document.getElementById('my-title').innerText, extra: document.getElementById('my-extra').innerText, cfg: heroCfg };
+        shareData.my = { saying: (PROFILE[t] || {}).saying, weak: (PROFILE[t] || {}).weak, type: t, className: job, sideJob: side, race, title: document.getElementById('my-title').innerText, extra: document.getElementById('my-extra').innerText, cfg: heroCfg };
         showScreen('screen-my-result');
         playHatch();
     }
@@ -942,9 +1052,13 @@
         }).join("");
         const charInfo = characters[myCalculatedType] || characters["INTJ"];
         const pf = PROFILE[myCalculatedType] || {};
+        myAxisIdx = pickAxisIdx(myBalance);      // 一番はっきり出た軸
+        myJob = (jobs[myCalculatedType] || [])[myAxisIdx] || charInfo.name;
+        const axG = AXIS_GROUPS[myAxisIdx], axLetter = myCalculatedType[myAxisIdx];
 
         document.getElementById('my-type-code').innerText = myCalculatedType;
-        document.getElementById('my-class-name').innerText = charInfo.name;
+        document.getElementById('my-class-name').innerText = myJob;
+        document.getElementById('my-axis-note').innerText = `（${AXIS_INFO[axG][axLetter === axG[0] ? 0 : 1]}の傾向が一番強い）`;
         document.getElementById('my-catch').innerText = charInfo.catch;
         document.getElementById('my-saying').innerText = pf.saying ? `「${pf.saying}」` : "—";
         document.getElementById('my-weak').innerText = pf.weak || "—";
@@ -952,6 +1066,13 @@
         renderBalance();
 
         showScreen('screen-profile');
+    }
+
+    // 傾きが一番大きい軸（同点は 外向内向 → 現実直感 → 論理感情 → 計画柔軟 の順）
+    function pickAxisIdx(bal) {
+        let best = 0, bestV = -1;
+        AXIS_GROUPS.forEach((g, i) => { const v = Math.abs((bal[g] != null ? bal[g] : 50) - 50); if (v > bestV) { best = i; bestV = v; } });
+        return best;
     }
 
     function renderBalance() {
