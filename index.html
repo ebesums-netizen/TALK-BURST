@@ -339,7 +339,7 @@
         </div>
 
         <div class="ad-banner">
-            <p style="font-size: 0.85rem; color: var(--text-sub); margin: 0 0 10px 0;">🎁 広告を見て耐性を強化しますか？</p>
+            <p id="ad-promo" style="font-size: 0.85rem; color: var(--text-sub); margin: 0 0 10px 0;">🎁 広告を見て耐性を強化しますか？</p>
             <p style="font-size: 0.9rem; margin: 0 0 10px 0;"><strong id="res-item"></strong></p>
             <button id="btn-ad" style="background: #059669; margin-top: 0;" onclick="watchAd()"><span class="nb">【動画広告】</span><span class="nb">ポーションを服用する</span> <span class="nb">(+30分延長)</span></button>
         </div>
@@ -357,6 +357,23 @@
     const GAS_API_URL = "https://script.google.com/macros/s/AKfycbyw59yeryhjg6oir3i5jRvdxX1uze8B-SLpwXNe_mkBFdK5x9Zj9mJNKdFtwkw0qZAc/exec";
     const FETCH_TIMEOUT_MS = 10000;
     const AD_BONUS_MINUTES = 30;
+    // ★広告モード: "off"＝広告なし（全シチュエーション開放・広告ボタン非表示） / "demo"＝デモ（confirm/alert） / "live"＝本番（showRewardedAd の中身を実サービスに差し替える）
+    let ADS_MODE = "off";
+    const adsOn = () => ADS_MODE !== "off";
+    const isSitLocked = (sit) => adsOn() && !!sit.locked && !unlockedSituations.has(sit.id);
+
+    // 広告の呼び出しはここ1か所。kind: "unlock"（シチュエーション解放）／"potion"（ポーション延長）。視聴が完了したら true
+    async function showRewardedAd(kind, name) {
+        if (!adsOn()) return true;
+        if (ADS_MODE === "demo") {
+            if (kind === "unlock") return confirm(`「${name}」は広告視聴で解放されます。\n【デモ】15秒の動画広告を見ますか？`);
+            alert("【デモ】15秒の動画広告再生完了！");
+            return true;
+        }
+        // "live": ここに広告SDK（AdSense / Ad Manager / AdMob など）の呼び出しを入れる。完了したら true、失敗・中断は false
+        console.warn("ADS_MODE=live: 広告サービス未接続");
+        return false;
+    }
 
     // ---------- フォールバック用マスターデータ（GAS取得失敗時もこれで動く） ----------
     const DEFAULT_CHARACTERS = {
@@ -756,7 +773,7 @@
             situations.forEach(s => {
                 const o = document.createElement('option');
                 o.value = s.id;
-                const locked = s.locked && !unlockedSituations.has(s.id);
+                const locked = isSitLocked(s);
                 o.textContent = (locked ? "🔒 " : "") + s.name;
                 sel.appendChild(o);
             });
@@ -1259,18 +1276,18 @@
         document.getElementById('rank-type').value = characters[type] ? type : "INTJ";
         const sel = document.getElementById('rank-sit');
         const cur = situations.find(s => s.id === sel.value);
-        if (!cur || (cur.locked && !unlockedSituations.has(cur.id))) {      // 広告ロック中の状況は選ばず、最初の開放済みの状況から始める
-            const first = situations.find(s => !s.locked || unlockedSituations.has(s.id)) || situations[0];
+        if (!cur || isSitLocked(cur)) {      // 広告ロック中の状況は選ばず、最初の開放済みの状況から始める
+            const first = situations.find(s => !isSitLocked(s)) || situations[0];
             sel.value = first.id;
         }
         rankLastSit = sel.value;
         renderRanking();
         showScreen('screen-rank');
     }
-    function onRankSituationChange() {
+    async function onRankSituationChange() {
         const sel = document.getElementById('rank-sit');
         const sit = situations.find(s => s.id === sel.value) || situations[0];
-        if (!tryUnlockSituation(sit)) { sel.value = rankLastSit; return; }   // 解放しなければ、元の状況に戻す
+        if (!(await tryUnlockSituation(sit))) { sel.value = rankLastSit; return; }   // 解放しなければ、元の状況に戻す
         sel.value = sit.id;
         rankLastSit = sit.id;
         renderRanking();
@@ -1356,9 +1373,9 @@
     }
 
     // 広告ロック中のシチュエーションを、広告視聴（デモ）で解放する。解放できた（または元から開放済み）なら true
-    function tryUnlockSituation(sit) {
-        if (sit.locked && !unlockedSituations.has(sit.id)) {
-            if (!confirm(`「${sit.name}」は広告視聴で解放されます。\n【デモ】15秒の動画広告を見ますか？`)) return false;
+    async function tryUnlockSituation(sit) {
+        if (isSitLocked(sit)) {
+            if (!(await showRewardedAd("unlock", sit.name))) return false;
             unlockedSituations.add(sit.id);
             initSituationOptions();
         }
@@ -1372,7 +1389,7 @@
         const sit = situations.find(s => s.id === sitId) || situations[0];
 
         // 広告ロック中のシチュエーションは、広告視聴（デモ）で解放
-        if (!tryUnlockSituation(sit)) return;
+        if (!(await tryUnlockSituation(sit))) return;
         document.getElementById('situation').value = sit.id;
 
         const btn = document.getElementById('btn-compat');
@@ -1411,6 +1428,8 @@
             : generated ? "※ ブラック相性エンジンによる自動査定です。" : "";
 
         const adBtn = document.getElementById('btn-ad');
+        document.getElementById('ad-promo').style.display = adsOn() ? '' : 'none';   // 広告なしのときは、広告の案内とボタンを隠す（特効薬の表示は残す）
+        adBtn.style.display = adsOn() ? '' : 'none';
         adBtn.disabled = false;
         adBtn.innerText = `【動画広告】ポーションを服用する (+${AD_BONUS_MINUTES}分延長)`;
 
@@ -1419,11 +1438,11 @@
         startCompatScene(typeA, typeB, currentLimit);
     }
 
-    function watchAd() {
-        if (adUsed) return;
+    async function watchAd() {
+        if (adUsed || !adsOn()) return;
         adUsed = true;
+        if (!(await showRewardedAd("potion"))) { adUsed = false; return; }   // 視聴できなければ延長しない（もう一度押せる）
         currentLimit += AD_BONUS_MINUTES;   // 元の時間に加算（固定の45分ではない）
-        alert(`【デモ】15秒の動画広告再生完了！ 会話時間が${AD_BONUS_MINUTES}分延長され、相手の脳内マニュアルが解放されました。`);
         document.getElementById('res-time').innerText = `${currentLimit} 分 (ポーション効果発動中)`;
         const adBtn = document.getElementById('btn-ad');
         adBtn.disabled = true;
