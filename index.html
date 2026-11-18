@@ -186,10 +186,24 @@
         .scale-lab { display: flex; justify-content: space-between; font-size: 0.72rem; color: #9a9ab0; margin: 2px 2px 0; }
         /* 性格バランス */
         .sub { font-size: 0.75rem; color: var(--text-sub); }
-        #typeA, #typeB { font-size: clamp(12px, 3.7vw, 16px); }   /* 長い職種名がはみ出さないよう、画面幅に合わせて小さくする */
         #my-title, #my-class-name { word-break: keep-all; overflow-wrap: anywhere; }   /* 称号・職種名は、スペースや「・」の位置で改行する */
         .disclaimer { font-size: 0.7rem; color: #7b7b92; line-height: 1.5; margin: 18px 4px 0; }
         #screen-quiz.active ~ .disclaimer { display: none; }
+        /* 相性ランキング */
+        #typeA, #typeB, #rank-type { font-size: clamp(12px, 3.7vw, 16px); }
+        .rank-h { font-size: 0.9rem; font-weight: bold; margin: 16px 0 4px; color: #c8c8d8; }
+        button.rank-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 8px 10px; margin: 6px 0; background: #1f1f2e; border: 1px solid #3a3a4e; border-radius: 10px; color: inherit; font-weight: normal; box-shadow: none; }
+        button.rank-row:hover { background: #26263a; }
+        .rank-row .bd { flex: none; width: 1.9rem; text-align: center; font-size: 1.35rem; }
+        .rank-row .ic { flex: none; width: 44px; line-height: 0; }
+        .rank-row .mid { flex: 1; min-width: 0; }
+        .rank-row .cd { font-size: 0.7rem; color: #ffd34e; font-weight: bold; letter-spacing: 0.04em; }
+        .rank-row .nm { font-weight: bold; font-size: 0.92rem; overflow-wrap: anywhere; text-wrap: balance; }
+        .rank-row .pl { font-size: 0.74rem; color: #9a9ab0; margin-top: 2px; }
+        .rank-row .tm { flex: none; font-size: 1.1rem; font-weight: bold; white-space: nowrap; }
+        .rank-row .tm.best { color: #6ee7b7; } .rank-row .tm.worst { color: #ff6b6b; }
+        .rank-base { display: flex; align-items: center; gap: 10px; margin: 12px 0 2px; font-weight: bold; }
+        .rank-base .ic { width: 52px; line-height: 0; flex: none; }
         .bal-box { margin-top: 10px; padding-top: 8px; border-top: 1px dashed #3a3a4e; }
         .bal-t { font-size: 0.8rem; color: #9a9ab0; margin-bottom: 4px; }
         .bal-row { margin: 8px 0; }
@@ -278,6 +292,7 @@
         <button style="background:#d97706;" onclick="shareCard('my')">📤 結果をシェア（画像）</button>
         <button class="btn-secondary" onclick="window.open(xUrl('my'),'_blank')">𝕏 に文章だけ投稿</button>
         <button onclick="goToCompatWithMyType()">🤝 <span class="nb">他のキャラとの</span><span class="nb">ブラック相性を測る</span></button>
+        <button onclick="openRanking('screen-my-result', myCalculatedType)">🏆 <span class="nb">相性ベスト3／</span><span class="nb">ワースト3を見る</span></button>
         <button class="btn-secondary" onclick="showScreen('screen-menu')">トップに戻る</button>
     </div>
 
@@ -294,7 +309,20 @@
         <select id="situation"></select>
 
         <button id="btn-compat" onclick="fetchCompatibility()">ブラック査定を実行する</button>
+        <button class="btn-secondary" onclick="openRanking('screen-compat', document.getElementById('typeA').value)">🏆 Aのタイプの相性ランキング</button>
         <button class="btn-secondary" onclick="showScreen('screen-menu')">戻る</button>
+    </div>
+
+    <!-- 画面4b: 相性ランキング（ベスト3／ワースト3） -->
+    <div id="screen-rank" class="screen">
+        <h3>🏆 相性ランキング</h3>
+        <label>基準にするタイプ:</label>
+        <select id="rank-type" onchange="renderRanking()"></select>
+        <label>シチュエーション:</label>
+        <select id="rank-sit" onchange="onRankSituationChange()"></select>
+        <div id="rank-body"></div>
+        <p class="note" style="margin-top: 14px;">※ 自動査定の目安です。手書きの査定が登録されている組み合わせは、詳細の数字が少し違うことがあります。行をタップすると、解説と特効薬が見られます。</p>
+        <button class="btn-secondary" onclick="showScreen(rankFrom)">戻る</button>
     </div>
 
     <!-- 画面5: 相性査定結果表示 -->
@@ -700,13 +728,15 @@
     function initSelectOptions() {
         const selectA = document.getElementById('typeA');
         const selectB = document.getElementById('typeB');
-        const keepA = selectA.value, keepB = selectB.value;
+        const selectR = document.getElementById('rank-type');
+        const keepA = selectA.value, keepB = selectB.value, keepR = selectR.value;
         selectA.innerHTML = '';
         selectB.innerHTML = '';
+        selectR.innerHTML = '';
 
         for (const code in characters) {
             const label = `${code}（${characters[code].name}）`;
-            [selectA, selectB].forEach(sel => {
+            [selectA, selectB, selectR].forEach(sel => {
                 const o = document.createElement('option');
                 o.value = code;
                 o.textContent = label;
@@ -715,20 +745,23 @@
         }
         selectA.value = keepA || "INTJ";
         selectB.value = keepB || "ENFP";
+        selectR.value = keepR || "INTJ";
     }
 
     function initSituationOptions() {
-        const sel = document.getElementById('situation');
-        const keep = sel.value;
-        sel.innerHTML = '';
-        situations.forEach(s => {
-            const o = document.createElement('option');
-            o.value = s.id;
-            const locked = s.locked && !unlockedSituations.has(s.id);
-            o.textContent = (locked ? "🔒 " : "") + s.name;
-            sel.appendChild(o);
+        ['situation', 'rank-sit'].forEach(id => {
+            const sel = document.getElementById(id);
+            const keep = sel.value;
+            sel.innerHTML = '';
+            situations.forEach(s => {
+                const o = document.createElement('option');
+                o.value = s.id;
+                const locked = s.locked && !unlockedSituations.has(s.id);
+                o.textContent = (locked ? "🔒 " : "") + s.name;
+                sel.appendChild(o);
+            });
+            if (keep && situations.some(s => s.id === keep)) sel.value = keep;
         });
-        if (keep && situations.some(s => s.id === keep)) sel.value = keep;
     }
 
     // ---------- 診断 ----------
@@ -1219,6 +1252,82 @@
 
     // ---------- 相性画面の演出：向かい合う2体＋限界ゲージ ----------
     let cmpTimer = null, cmpT = 0, cmpPair = null;
+    // ---------- 相性ランキング（ベスト3／ワースト3） ----------
+    let rankFrom = "screen-my-result", rankLastSit = "1";
+    function openRanking(fromScreen, type) {
+        rankFrom = fromScreen;
+        document.getElementById('rank-type').value = characters[type] ? type : "INTJ";
+        const sel = document.getElementById('rank-sit');
+        const cur = situations.find(s => s.id === sel.value);
+        if (!cur || (cur.locked && !unlockedSituations.has(cur.id))) {      // 広告ロック中の状況は選ばず、最初の開放済みの状況から始める
+            const first = situations.find(s => !s.locked || unlockedSituations.has(s.id)) || situations[0];
+            sel.value = first.id;
+        }
+        rankLastSit = sel.value;
+        renderRanking();
+        showScreen('screen-rank');
+    }
+    function onRankSituationChange() {
+        const sel = document.getElementById('rank-sit');
+        const sit = situations.find(s => s.id === sel.value) || situations[0];
+        if (!tryUnlockSituation(sit)) { sel.value = rankLastSit; return; }   // 解放しなければ、元の状況に戻す
+        sel.value = sit.id;
+        rankLastSit = sit.id;
+        renderRanking();
+    }
+    // 基準タイプ t と、ほかの15タイプの相性（限界会話時間）の一覧
+    function rankingFor(t, sitId) {
+        return Object.keys(characters).filter(o => o !== t).map(o => {
+            const r = genCompat(t, o, sitId);
+            return { type: o, minutes: Number(r.limit_minutes), comment: r.black_comment, w: mismatchW(t, o) };
+        });
+    }
+    // 解説文の最後の（…）＝オチ
+    function punchlineOf(c) { const m = /（([^（）]*)）\s*$/.exec(c || ""); return m ? m[1] : ""; }
+    function miniHero(t) {
+        const cfg = { t, aura: LIGHT_TYPES.includes(t) ? AUR.light[1] : AUR.dark[1], gender: "", blood: "", eto: null };
+        return heroSvg(cfg, 0, "idle", false).replace('width="160"', 'width="44"');
+    }
+    function renderRanking() {
+        const t = document.getElementById('rank-type').value, sitId = document.getElementById('rank-sit').value;
+        const list = rankingFor(t, sitId);
+        // 同じ分数のときの順番: ベストは「タイプの違いが小さい順」、ワーストは「違いが大きい順」。それでも同じなら記号順
+        const best = list.slice().sort((a, b) => b.minutes - a.minutes || a.w - b.w || a.type.localeCompare(b.type)).slice(0, 3);
+        const worst = list.slice().sort((a, b) => a.minutes - b.minutes || b.w - a.w || a.type.localeCompare(b.type)).slice(0, 3);
+        const body = document.getElementById('rank-body');
+        body.innerHTML = '';
+        const base = document.createElement('div'); base.className = 'rank-base';
+        const bi = document.createElement('div'); bi.className = 'ic'; bi.innerHTML = miniHero(t);
+        const bt = document.createElement('div'); bt.style.cssText = 'overflow-wrap:anywhere;text-wrap:balance'; bt.textContent = `${t}　${characters[t].name}　の相性`;
+        base.appendChild(bi); base.appendChild(bt); body.appendChild(base);
+        const section = (title, items, badges, cls) => {
+            const h = document.createElement('div'); h.className = 'rank-h'; h.textContent = title; body.appendChild(h);
+            items.forEach((it, i) => {
+                const row = document.createElement('button'); row.type = 'button'; row.className = 'rank-row';
+                row.onclick = () => openPairDetail(t, it.type, sitId);
+                const bd = document.createElement('span'); bd.className = 'bd'; bd.textContent = badges[i];
+                const ic = document.createElement('span'); ic.className = 'ic'; ic.innerHTML = miniHero(it.type);
+                const mid = document.createElement('span'); mid.className = 'mid';
+                const cd = document.createElement('div'); cd.className = 'cd'; cd.textContent = it.type;
+                const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = characters[it.type].name;
+                const pl = document.createElement('div'); pl.className = 'pl'; pl.textContent = punchlineOf(it.comment);
+                mid.appendChild(cd); mid.appendChild(nm); if (pl.textContent) mid.appendChild(pl);
+                const tm = document.createElement('span'); tm.className = 'tm ' + cls; tm.textContent = `${it.minutes}分`;
+                row.appendChild(bd); row.appendChild(ic); row.appendChild(mid); row.appendChild(tm);
+                body.appendChild(row);
+            });
+        };
+        section('🥇 ベスト3（長く話せる相手）', best, ["🥇", "🥈", "🥉"], "best");
+        section('💀 ワースト3（早く限界が来る相手）', worst, ["💀", "☠️", "👻"], "worst");
+    }
+    // ランキングの行から、相性の詳細（解説・特効薬）を開く
+    function openPairDetail(a, b, sitId) {
+        document.getElementById('typeA').value = a;
+        document.getElementById('typeB').value = b;
+        document.getElementById('situation').value = sitId;
+        fetchCompatibility();
+    }
+
     function startCompatScene(a, b, limit) {
         clearInterval(cmpTimer); cmpPair = [a, b]; cmpT = 0;
         const cfg = t => ({ t, aura: LIGHT_TYPES.includes(t) ? AUR.light[1] : AUR.dark[1], gender: "", blood: "", eto: null });
@@ -1246,6 +1355,16 @@
         };
     }
 
+    // 広告ロック中のシチュエーションを、広告視聴（デモ）で解放する。解放できた（または元から開放済み）なら true
+    function tryUnlockSituation(sit) {
+        if (sit.locked && !unlockedSituations.has(sit.id)) {
+            if (!confirm(`「${sit.name}」は広告視聴で解放されます。\n【デモ】15秒の動画広告を見ますか？`)) return false;
+            unlockedSituations.add(sit.id);
+            initSituationOptions();
+        }
+        return true;
+    }
+
     async function fetchCompatibility() {
         const typeA = document.getElementById('typeA').value;
         const typeB = document.getElementById('typeB').value;
@@ -1253,12 +1372,8 @@
         const sit = situations.find(s => s.id === sitId) || situations[0];
 
         // 広告ロック中のシチュエーションは、広告視聴（デモ）で解放
-        if (sit.locked && !unlockedSituations.has(sit.id)) {
-            if (!confirm(`「${sit.name}」は広告視聴で解放されます。\n【デモ】15秒の動画広告を見ますか？`)) return;
-            unlockedSituations.add(sit.id);
-            initSituationOptions();
-            document.getElementById('situation').value = sit.id;
-        }
+        if (!tryUnlockSituation(sit)) return;
+        document.getElementById('situation').value = sit.id;
 
         const btn = document.getElementById('btn-compat');
         btn.disabled = true;
