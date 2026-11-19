@@ -523,6 +523,21 @@
             quiz: { bpm: 108, li: ["square", 0.12, 1.6], bi: ["triangle", 0.26, 1.7], lp: 3200, hat: [3, 7],
                 mel: ["E5 . G5 . E5 . D5 .", "C5 . D5 E5 . . . .", "G5 . A5 . G5 . E5 .", "D5 . E5 D5 C5 . . .", "A4 . C5 . D5 . E5 .", "G5 . E5 . D5 . C5 .", "D5 . E5 . G5 . A5 .", "G5 E5 D5 C5 . . . ."],
                 bn: ["C3 G3", "C3 G3", "F3 C4", "G3 D4", "A3 E4", "F3 C4", "G3 D4", "C3 G3"] },
+            // トップ画面：「どれにする？」のワクワク。ぴょこぴょこ弾むト長調（最後の小節が疑問形で上がって、また頭に戻る）
+            menu: { bpm: 116, li: ["square", 0.1, 1.4], bi: ["triangle", 0.26, 1.6], vol: 0.85, lp: 3600, kick: [0, 4], hat: [2, 6],
+                mel: ["D5 . G5 . B5 . G5 D5", "E5 . G5 . C6 . G5 E5", "D5 . G5 . B5 A5 G5 .", "F#5 . A5 . D6 . . .",
+                      "E5 . G5 . B5 . G5 E5", "E5 G5 C6 . B5 . G5 .", "A5 . F#5 . D5 . F#5 A5", "A5 . . F#5 . . D5 ."],
+                bn: ["G3 D4", "C3 G3", "G3 D4", "D3 A3", "E3 B3", "C3 G3", "D3 A3", "D3 A3"] },
+            // 相性の選択・ランキング：ふたりの距離感。やわらかくて少しナイショ話っぽいイ短調
+            compat: { bpm: 100, li: ["triangle", 0.18, 1.8], bi: ["sine", 0.28, 1.9], vol: 0.75, lp: 3000, hat: [3, 7], hf: 5000, hv: 0.06,
+                mel: ["E5 . A5 . C6 . A5 .", "C5 . F5 . A5 . F5 .", "E5 . G5 . C6 . G5 E5", "D5 . G5 . B5 . D6 .",
+                      "C6 . B5 A5 . E5 . .", "D5 . F5 . A5 . F5 D5", "E5 . G#5 . B5 . G#5 .", "A5 . . E5 . . A4 ."],
+                bn: ["A3 E4", "F3 C4", "C3 G3", "G3 D4", "A3 E4", "D3 A3", "E3 B3", "A3 E4"] },
+            // 査定結果（ブラック判定）：短く切るスタッカートのホ短調。ちょっと緊迫してコミカル
+            verdict: { bpm: 126, li: ["square", 0.1, 1.0], bi: ["triangle", 0.3, 1.2], lp: 2800, kick: [0, 4], snare: [2, 6], hat: [3, 7], vol: 0.9,
+                mel: ["E5 . . E5 G5 . F#5 .", "E5 . . E5 B5 . A5 .", "C5 . . C5 E5 . D5 .", "B4 . D#5 . F#5 . D#5 .",
+                      "E5 . G5 . B5 . E6 .", "D6 . B5 . G5 . B5 .", "C6 . B5 . A5 . G5 .", "F#5 . D#5 . B4 . . ."],
+                bn: ["E3 B3", "E3 B3", "C3 G3", "B2 F#3", "E3 B3", "E3 B3", "C3 G3", "B2 F#3"] },
             // 炎：イ短調。速くて熱い、のこぎり波のリード＋ドラム
             fire: { bpm: 150, li: ["sawtooth", 0.1, 1.3], bi: ["triangle", 0.28, 1.5], lp: 4200, kick: [0, 4], snare: [2, 6], hat: [1, 3, 5, 7], vol: 1,
                 mel: ["A4 C5 E5 C5 A4 C5 E5 C5", "A5 . G5 E5 C5 E5 G5 .", "F5 . E5 C5 A4 C5 F5 .", "G5 . F5 D5 B4 D5 G5 .",
@@ -622,6 +637,9 @@
         // 画面 → 曲。孵化後の結果画面は、卵が割れて誕生音が鳴り終わるまで無音（resultOk が true になってから属性の曲）
         function trackFor(id) {
             if (id === "screen-quiz" || id === "screen-profile") return "quiz";
+            if (id === "screen-menu") return "menu";
+            if (id === "screen-compat" || id === "screen-rank") return "compat";
+            if (id === "screen-result") return "verdict";
             if (id === "screen-my-result") return resultOk ? resultKey : null;
             return null;
         }
@@ -678,6 +696,7 @@
         ["touchend", "click", "keydown"].forEach(ev => document.addEventListener(ev, api.unlock, { passive: true }));
         document.addEventListener("visibilitychange", () => { if (!ac) return; if (document.hidden) ac.suspend(); else if (on) ac.resume(); });
         updateBtn();
+        api.onScreen("screen-menu");   // 起動時のトップ画面の曲（最初のタップで音が解禁されたら流れる）
         return api;
     })();
 
@@ -688,6 +707,7 @@
         if (screenId !== 'screen-result' && typeof cmpTimer !== 'undefined') clearInterval(cmpTimer);
         document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
         document.getElementById(screenId).classList.add('active');
+        try { window.scrollTo(0, 0); } catch (e) {}   // 画面が替わったら先頭へ（前の画面の下までスクロールしていても、孵化の演出などが見える）
     }
 
     // ---------- GAS通信 ----------
