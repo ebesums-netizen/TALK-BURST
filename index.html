@@ -163,6 +163,34 @@
         .flashing { animation: flsh .6s ease-out; }
         @media (prefers-reduced-motion: reduce) { .shake, .shake2, .flashing { animation: none; } }
 
+
+        /* ---- オープニング画面（2026-11-19） ---- */
+        .container.opening h1 { display: none; }
+        #screen-opening { cursor: pointer; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
+        .op-stage { position: relative; height: 400px; overflow: hidden; border-radius: 10px; border: 3px solid #3a2d4f; background: linear-gradient(#241a45, #3b2d63 70%); }
+        .op-ground { position: absolute; left: 0; right: 0; bottom: 0; height: 84px; background: #6b8f4e; border-top: 3px solid #3a2d4f; }
+        .op-title { position: absolute; top: 14px; left: 0; right: 0; text-align: center; color: #ffd36b; font-weight: bold; font-size: 1.5rem; line-height: 1.35; text-shadow: 0 3px 0 #3a2d4f, 0 0 14px rgba(255,211,107,.45); }
+        .op-title .sw { font-size: 1.9rem; display: block; }
+        .op-eggs { position: absolute; left: 0; right: 0; bottom: 78px; display: flex; justify-content: center; align-items: flex-end; gap: 10px; }
+        .op-egg { transform-origin: 50% 100%; }
+        .op-egg svg { display: block; width: 66px; height: auto; } .op-egg.e2 svg { width: 92px; } .op-egg.e3 svg { width: 56px; }
+        .op-bubble { position: absolute; left: 50%; top: 124px; transform: translateX(-50%); max-width: 88%; background: #fff; color: #2f2540; border: 3px solid #2f2540; border-radius: 12px; padding: 7px 12px; font-weight: bold; font-size: 0.92rem; text-align: center; text-wrap: balance; word-break: keep-all; overflow-wrap: anywhere; }
+        .op-bubble:empty { display: none; }
+        .op-bubble::after { content: ""; position: absolute; left: 50%; bottom: -11px; width: 14px; height: 14px; background: #fff; border-right: 3px solid #2f2540; border-bottom: 3px solid #2f2540; transform: translateX(-50%) rotate(45deg); }
+        .op-spark { position: absolute; font-size: 1.1rem; opacity: .8; } .op-spark.s1 { left: 9%; top: 36%; } .op-spark.s2 { right: 10%; top: 30%; } .op-spark.s3 { left: 20%; top: 58%; }
+        .op-tap { margin-top: 14px; text-align: center; font-weight: bold; color: #ffd36b; font-size: 1.05rem; animation: opBlink 1.1s steps(2) infinite; }
+        .op-note { text-align: center; color: var(--text-sub); font-size: 0.75rem; margin-top: 4px; }
+        @keyframes opBlink { 50% { opacity: .25; } }
+        @keyframes opDrop { 0% { transform: translateY(-220px); opacity: 0; } 55% { transform: translateY(10px); opacity: 1; } 70% { transform: translateY(-16px); } 85% { transform: translateY(4px); } 100% { transform: translateY(0); } }
+        @keyframes opHop { 0%, 100% { transform: translateY(0) scale(1.06, .9); } 50% { transform: translateY(-34px) scale(.95, 1.05); } }
+        @keyframes opSlip { 0% { transform: translateY(0) rotate(0); } 30% { transform: translateY(-46px) rotate(-22deg); } 62% { transform: translateY(0) rotate(-95deg); } 100% { transform: translateY(0) rotate(-90deg); } }
+        @keyframes opTwinkle { 0%, 100% { opacity: .25; transform: scale(.8); } 50% { opacity: 1; transform: scale(1.15); } }
+        .op-play .op-title { animation: opDrop .9s ease-out both; }
+        .op-play .op-egg { animation: opHop .7s ease-in-out 1s infinite; } .op-play .op-egg.e2 { animation-delay: 1.15s; } .op-play .op-egg.e3 { animation-delay: 1.3s; }
+        .op-play .op-egg.slip { animation: opSlip .9s ease-in forwards; }
+        .op-play .op-spark { animation: opTwinkle 1.4s ease-in-out infinite; } .op-play .op-spark.s2 { animation-delay: .4s; } .op-play .op-spark.s3 { animation-delay: .8s; }
+        @media (prefers-reduced-motion: reduce) { .op-tap, .op-play .op-title, .op-play .op-egg, .op-play .op-egg.slip, .op-play .op-spark { animation: none; } }
+
         /* ---- 画面の崩れ修正（2026-11-15） ---- */
         .nb { display: inline-block; }
         h1, h3 { text-wrap: balance; }
@@ -226,11 +254,24 @@
 <body>
 <button id="snd-btn" type="button" onclick="SFX.toggle()" aria-label="サウンドのオン・オフ" title="サウンド">🔊</button>
 
-<div class="container">
+<div class="container opening">
     <h1>⚔️ <span class="nb">異世界ギルド：</span><span class="nb">ブラック判定所</span> ⚔️</h1>
 
+    <!-- 画面0: オープニング（タッチで始まる → コミカルな演出と曲 → タッチでトップ画面へ） -->
+    <div id="screen-opening" class="screen active" onclick="openingTap()" role="button" aria-label="タッチしてはじめる">
+        <div class="op-stage">
+            <div class="op-spark s1">✨</div><div class="op-spark s2">✨</div><div class="op-spark s3">✨</div>
+            <div class="op-title"><span class="sw">⚔️</span><span class="nb">異世界ギルド：</span><span class="nb">ブラック判定所</span></div>
+            <div id="op-bubble" class="op-bubble"></div>
+            <div class="op-eggs"><div class="op-egg e1"></div><div class="op-egg e2"></div><div class="op-egg e3"></div></div>
+            <div class="op-ground"></div>
+        </div>
+        <div id="op-tap" class="op-tap">👆 タッチではじまる</div>
+        <div id="op-note" class="op-note">🔊 音が出ます（右上のボタンで消せます）</div>
+    </div>
+
     <!-- 画面1: メニュー画面 -->
-    <div id="screen-menu" class="screen active">
+    <div id="screen-menu" class="screen">
         <p style="text-align: center; color: var(--text-sub);">あなたのギルド職種を判定し、他の冒険者との「限界会話時間」をシニカルに分析します。</p>
         <button onclick="startDiagnosis()">📜 職種診断を始める (全16問)</button>
         <button class="btn-secondary" onclick="showScreen('screen-compat')">👥 直接タイプを選んで相性判定</button>
@@ -510,7 +551,7 @@
     // 質問中：BGM / 回答：ピッ / 孵化：殻が割れる音 → 羽化の誕生音。右上のボタンでオン・オフ（端末内に保存）。
     const SFX = (function () {
         let ac = null, master = null, bgm = null, bgmTimer = null, bgmNext = 0, on = true, wantBgm = false, noiseBuf = null;
-        let wantKey = null, curKey = null, curTr = null, resultKey = null, resultOk = false;   // wantKey＝流したい曲 / curKey＝今流れている曲 / resultKey＝孵化後の曲（属性）
+        let wantKey = null, curKey = null, curTr = null, resultKey = null, resultOk = false, openingOn = false;   // wantKey＝流したい曲 / curKey＝今流れている曲 / resultKey＝孵化後の曲（属性）
         try { on = localStorage.getItem('tb_sound') !== '0'; } catch (e) {}
         const MASTER = 0.55, BGM_LEVEL = 0.5;
         const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
@@ -523,6 +564,11 @@
             quiz: { bpm: 108, li: ["square", 0.12, 1.6], bi: ["triangle", 0.26, 1.7], lp: 3200, hat: [3, 7],
                 mel: ["E5 . G5 . E5 . D5 .", "C5 . D5 E5 . . . .", "G5 . A5 . G5 . E5 .", "D5 . E5 D5 C5 . . .", "A4 . C5 . D5 . E5 .", "G5 . E5 . D5 . C5 .", "D5 . E5 . G5 . A5 .", "G5 E5 D5 C5 . . . ."],
                 bn: ["C3 G3", "C3 G3", "F3 C4", "G3 D4", "A3 E4", "F3 C4", "G3 D4", "C3 G3"] },
+            // オープニング：コミカルな行進曲（ハ長調）。最後の小節でずっこけるように下がって、頭に戻る
+            opening: { bpm: 150, li: ["square", 0.1, 0.9], bi: ["triangle", 0.28, 1.3], vol: 0.85, lp: 3400, kick: [0, 4], snare: [2, 6], hat: [1, 3, 5, 7], hv: 0.07,
+                mel: ["C5 E5 G5 E5 C5 E5 G5 .", "B4 D5 G5 D5 B4 D5 G5 .", "C5 E5 G5 C6 B5 G5 E5 .", "A5 . F5 A5 C6 . A5 .",
+                      "G5 . E5 . G5 . C6 .", "D6 . B5 . G5 . B5 D6", "C6 . A5 . F5 . A5 C6", "G5 F5 E5 D5 B4 . G4 ."],
+                bn: ["C3 G3", "G3 D4", "C3 G3", "F3 C4", "C3 G3", "G3 D4", "F3 C4", "G3 D4"] },
             // トップ画面：「どれにする？」のワクワク。ぴょこぴょこ弾むト長調（最後の小節が疑問形で上がって、また頭に戻る）
             menu: { bpm: 116, li: ["square", 0.1, 1.4], bi: ["triangle", 0.26, 1.6], vol: 0.85, lp: 3600, kick: [0, 4], hat: [2, 6],
                 mel: ["D5 . G5 . B5 . G5 D5", "E5 . G5 . C6 . G5 E5", "D5 . G5 . B5 A5 G5 .", "F#5 . A5 . D6 . . .",
@@ -637,6 +683,7 @@
         // 画面 → 曲。孵化後の結果画面は、卵が割れて誕生音が鳴り終わるまで無音（resultOk が true になってから属性の曲）
         function trackFor(id) {
             if (id === "screen-quiz" || id === "screen-profile") return "quiz";
+            if (id === "screen-opening") return openingOn ? "opening" : null;   // 最初のタッチで音が解禁されてから流す
             if (id === "screen-menu") return "menu";
             if (id === "screen-compat" || id === "screen-rank") return "compat";
             if (id === "screen-result") return "verdict";
@@ -658,6 +705,16 @@
                 } catch (e) {}
             },
             onScreen(id) { const k = trackFor(id); if (k) bgmStart(k); else { wantBgm = false; wantKey = null; killBgm(); } },
+            openingPlay() { openingOn = true; bgmStart("opening"); },    // オープニング：最初のタッチで曲を始める
+            boing() {       // ぼよ〜ん（タイトルが落ちてくる）
+                if (!ready()) return; const t = ac.currentTime;
+                tone(t, 180, 0.3, "sine", 0.5, master, 720); tone(t + 0.13, 520, 0.22, "triangle", 0.3, master, 300);
+            },
+            slip() {        // ずっこけ：ひゅ〜っと下がって、ごんっ
+                if (!ready()) return; const t = ac.currentTime;
+                tone(t, 900, 0.4, "triangle", 0.45, master, 140);
+                tone(t + 0.42, 130, 0.12, "sine", 0.55, master, 60); noise(t + 0.42, 0.1, 900, 0.7, 0.4, master);
+            },
             setResult(key) { resultKey = key; resultOk = false; },      // 孵化の開始時：属性の曲を用意（まだ流さない）
             resultReady() { resultOk = true; const a = document.querySelector(".screen.active"); if (a && a.id === "screen-my-result") bgmStart(resultKey); },   // 誕生音のあと：属性の曲を流す
             toggle() {
@@ -696,12 +753,14 @@
         ["touchend", "click", "keydown"].forEach(ev => document.addEventListener(ev, api.unlock, { passive: true }));
         document.addEventListener("visibilitychange", () => { if (!ac) return; if (document.hidden) ac.suspend(); else if (on) ac.resume(); });
         updateBtn();
-        api.onScreen("screen-menu");   // 起動時のトップ画面の曲（最初のタップで音が解禁されたら流れる）
+        api.onScreen("screen-opening");   // 起動時はオープニング（最初のタッチまで無音）
         return api;
     })();
 
     function showScreen(screenId) {
         SFX.onScreen(screenId);
+        const cont = document.querySelector('.container'); if (cont) cont.classList.toggle('opening', screenId === 'screen-opening');   // オープニングだけ、上の見出しを隠す
+        if (screenId !== 'screen-opening' && typeof opTimers !== 'undefined') opTimers.forEach(clearTimeout);
         if (screenId !== 'screen-my-result' && typeof heroTimer !== 'undefined') clearInterval(heroTimer);
         if (screenId !== 'screen-my-result' && typeof hatchTimers !== 'undefined') hatchTimers.forEach(clearTimeout);
         if (screenId !== 'screen-result' && typeof cmpTimer !== 'undefined') clearInterval(cmpTimer);
@@ -870,6 +929,28 @@
         for (let s = 0; s < (stage || 0) && s < 3; s++) CR[s].forEach(q => { o += `<rect x="${q[0] * 13}" y="${q[1] * 13}" width="13" height="13" fill="#2f2540"/>`; });
         return `<svg class="${cls === undefined ? "eg" : cls}" width="130" viewBox="0 0 156 169" shape-rendering="crispEdges" role="img" aria-label="卵">${o}</svg>`;
     }
+    // ---------- オープニング ----------
+    // 0=タッチ待ち（無音。iPhoneは最初のタッチまで音が出せない） / 1=演出中（誤タップ防止の短い間） / 2=演出中（タッチでトップへ）
+    let opState = 0, opTimers = [];
+    function openingTap() {
+        if (opState === 0) { startOpening(); return; }
+        if (opState === 2) { opTimers.forEach(clearTimeout); opState = 3; SFX.tap(2); showScreen('screen-menu'); }
+    }
+    function startOpening() {
+        opState = 1; SFX.unlock(); SFX.openingPlay(); SFX.boing();
+        const scr = document.getElementById('screen-opening'), bub = document.getElementById('op-bubble'), tp = document.getElementById('op-tap');
+        const e2 = document.querySelector('.op-egg.e2');
+        scr.classList.add('op-play'); document.getElementById('op-note').style.display = 'none';
+        const say = t => { bub.textContent = t; bub.classList.remove('pop'); void bub.offsetWidth; bub.classList.add('pop'); };
+        const at = (ms, fn) => opTimers.push(setTimeout(fn, ms));
+        at(700, () => { opState = 2; tp.textContent = '▶ タッチしてはじめる'; });
+        at(1500, () => say('異世界ギルドへ、ようこそ！'));
+        at(3500, () => say('あなたの会話、ちょっと黒くない？'));
+        at(5500, () => { e2.classList.add('slip'); SFX.slip(); say('ズコーッ！'); });
+        at(6900, () => { e2.classList.remove('slip'); say('限界会話時間、判定します。'); });
+    }
+    document.querySelectorAll('.op-egg').forEach(e => { e.innerHTML = eggSvg(0, 'op-svg'); });
+
     const AREAS = {
         EI: { name: "酒場の広場", bg: "#f1dfc0" }, SN: { name: "ざわめく森", bg: "#cfe8c8" },
         TF: { name: "魔導の鍛冶場", bg: "#ddd6ee" }, JP: { name: "星見の丘", bg: "#c9d6ee" }
@@ -1520,6 +1601,9 @@
         adBtn.innerText = "ポーション服用済み";
         if (cmpPair) startCompatScene(cmpPair[0], cmpPair[1], currentLimit);
     }
+
+    // ?op=0 を付けるとオープニングを飛ばす（テスト・共有リンク用）。他の変数の宣言がすべて終わった、スクリプトの最後で行う
+    if (/[?&]op=0(&|$)/.test(location.search)) showScreen('screen-menu');
 </script>
 
 </body>
