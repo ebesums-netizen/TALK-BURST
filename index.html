@@ -510,17 +510,52 @@
     // 質問中：BGM / 回答：ピッ / 孵化：殻が割れる音 → 羽化の誕生音。右上のボタンでオン・オフ（端末内に保存）。
     const SFX = (function () {
         let ac = null, master = null, bgm = null, bgmTimer = null, bgmNext = 0, on = true, wantBgm = false, noiseBuf = null;
+        let wantKey = null, curKey = null, curTr = null, resultKey = null, resultOk = false;   // wantKey＝流したい曲 / curKey＝今流れている曲 / resultKey＝孵化後の曲（属性）
         try { on = localStorage.getItem('tb_sound') !== '0'; } catch (e) {}
         const MASTER = 0.55, BGM_LEVEL = 0.5;
-        const BPM = 108, STEP = 60 / BPM / 2, LOOP = STEP * 64;       // 8分音符×64（8小節）
         const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
         const SEMI = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
         const midi = n => { const m = /^([A-G])(#?)(\d)$/.exec(n); return 12 * (+m[3] + 1) + SEMI[m[1]] + (m[2] ? 1 : 0); };
-        // 「考え中」っぽい、軽快でちょっととぼけたループ
-        const MEL = ["E5 . G5 . E5 . D5 .", "C5 . D5 E5 . . . .", "G5 . A5 . G5 . E5 .", "D5 . E5 D5 C5 . . .",
-                     "A4 . C5 . D5 . E5 .", "G5 . E5 . D5 . C5 .", "D5 . E5 . G5 . A5 .", "G5 E5 D5 C5 . . . ."];
-        const CHORD = ["C", "C", "F", "G", "A", "F", "G", "C"];
-        const BASS = { C: [48, 55], F: [53, 60], G: [55, 62], A: [57, 64] };
+        // ★曲データ（8分音符×64＝8小節のループ）。mel＝メロディ（"."は休み）、bn＝小節ごとのベース2音、
+        //   li／bi＝[音色, 音量, 長さ（1音の長さの倍率）]、lp＝高音をまろやかにする強さ、kick／snare／hat＝打楽器が鳴る位置（8分音符の0〜7番目）
+        const TR = {
+            // 「考え中」っぽい、軽快でちょっととぼけたループ（診断中〜孵化前）
+            quiz: { bpm: 108, li: ["square", 0.12, 1.6], bi: ["triangle", 0.26, 1.7], lp: 3200, hat: [3, 7],
+                mel: ["E5 . G5 . E5 . D5 .", "C5 . D5 E5 . . . .", "G5 . A5 . G5 . E5 .", "D5 . E5 D5 C5 . . .", "A4 . C5 . D5 . E5 .", "G5 . E5 . D5 . C5 .", "D5 . E5 . G5 . A5 .", "G5 E5 D5 C5 . . . ."],
+                bn: ["C3 G3", "C3 G3", "F3 C4", "G3 D4", "A3 E4", "F3 C4", "G3 D4", "C3 G3"] },
+            // 炎：イ短調。速くて熱い、のこぎり波のリード＋ドラム
+            fire: { bpm: 150, li: ["sawtooth", 0.1, 1.3], bi: ["triangle", 0.28, 1.5], lp: 4200, kick: [0, 4], snare: [2, 6], hat: [1, 3, 5, 7], vol: 1,
+                mel: ["A4 C5 E5 C5 A4 C5 E5 C5", "A5 . G5 E5 C5 E5 G5 .", "F5 . E5 C5 A4 C5 F5 .", "G5 . F5 D5 B4 D5 G5 .",
+                      "A4 C5 E5 C5 A4 C5 E5 A5", "B5 A5 G5 E5 C5 E5 A5 .", "F5 A5 C6 A5 F5 C5 A4 .", "E5 G#5 B5 G#5 E5 . . ."],
+                bn: ["A2 E3", "A2 E3", "F2 C3", "G2 D3", "A2 E3", "A2 E3", "F2 C3", "E2 B2"] },
+            // 大地：ハ長調。ゆっくり、どっしり、太鼓のような低音
+            earth: { bpm: 76, li: ["triangle", 0.2, 2.2], bi: ["triangle", 0.34, 2.6], vol: 0.65, lp: 2600, kick: [0, 4], hat: [],
+                mel: ["E4 . . G4 . . C5 .", "C5 . . A4 . . E4 .", "A4 . . C5 . . F5 .", "D5 . . B4 . . G4 .",
+                      "E4 . . G4 . . C5 .", "E5 . . D5 . . C5 .", "A4 . C5 . F5 . E5 .", "D5 . . . G4 . . ."],
+                bn: ["C3 G3", "A2 E3", "F2 C3", "G2 D3", "C3 G3", "A2 E3", "F2 C3", "G2 D3"] },
+            // 風：ト長調。軽やかなアルペジオ、さらさらした吹き抜ける音
+            wind: { bpm: 120, li: ["triangle", 0.15, 1.8], bi: ["sine", 0.22, 2.0], vol: 0.85, lp: 5200, hat: [1, 3, 5, 7], hf: 3200, hv: 0.05,
+                mel: ["G5 B5 D6 B5 G5 B5 D6 B5", "E5 G5 B5 G5 E5 G5 B5 G5", "C5 E5 G5 E5 C5 E5 G5 E5", "D5 F#5 A5 F#5 D5 F#5 A5 F#5",
+                      "G5 B5 D6 B5 G5 B5 D6 G6", "B5 G5 E5 G5 B5 . A5 .", "C6 B5 A5 G5 E5 G5 C5 .", "D5 . F#5 . A5 . . ."],
+                bn: ["G3 D4", "E3 B3", "C3 G3", "D3 A3", "G3 D4", "E3 B3", "C3 G3", "D3 A3"] },
+            // 水：イ短調。ゆっくり、しずかにゆらゆら。やわらかい正弦波
+            water: { bpm: 84, li: ["sine", 0.22, 3.2], bi: ["sine", 0.3, 3.4], vol: 0.5, lp: 2200, hat: [],
+                mel: ["E5 . . . A5 . . .", "C5 . . . F5 . A5 .", "E5 . G5 . C6 . . .", "D5 . . . B5 . G5 .",
+                      "A5 . . E5 . . C5 .", "A5 . F5 . C5 . . .", "G5 . E5 . C5 . E5 .", "D5 . . . . . . ."],
+                bn: ["A3 E4", "F3 C4", "C3 G3", "G3 D4", "A3 E4", "F3 C4", "C3 G3", "G3 D4"] },
+            // 光：ハ長調。きらきらと明るい高い音
+            light: { bpm: 132, li: ["triangle", 0.17, 1.6], bi: ["sine", 0.24, 1.8], lp: 5600, hat: [1, 3, 5, 7], hf: 9000, hv: 0.05, vol: 0.85,
+                mel: ["E6 . G6 E6 C6 . E6 .", "D6 . B5 . G5 . B5 D6", "C6 . E6 . A6 . G6 .", "A5 C6 F6 . E6 . C6 .",
+                      "E6 G6 C7 . G6 . E6 .", "B5 D6 G6 . D6 . B5 .", "A5 C6 F6 A6 G6 F6 E6 .", "D6 . G5 . B5 . D6 ."],
+                bn: ["C3 G3", "G3 D4", "A3 E4", "F3 C4", "C3 G3", "G3 D4", "F3 C4", "G3 D4"] },
+            // 闇：イ短調（半音で不穏に）。低く、少し重い
+            dark: { bpm: 96, li: ["square", 0.1, 2.0], bi: ["triangle", 0.32, 2.2], lp: 1800, kick: [0], snare: [6], vol: 0.8,
+                mel: ["A4 . C5 . E5 . C5 .", "A#4 . D5 . F5 . D5 .", "A4 . C5 . E5 . G#4 .", "G#4 . B4 . E5 . B4 .",
+                      "A4 . C5 . E5 . A5 .", "A#4 . D5 . F5 . A#5 .", "A4 . C5 . F5 . C5 .", "G#4 . B4 . E5 . . ."],
+                bn: ["A2 E3", "A#2 F3", "A2 E3", "E2 B2", "A2 E3", "A#2 F3", "F2 C3", "E2 B2"] }
+        };
+        const loopLen = tr => 60 / tr.bpm / 2 * 64;
+        const LOOP = loopLen(TR.quiz);
 
         function ready() { return !!ac && on; }
         // iPhoneはWebAudioがマナーモード（サイドスイッチ）で消されるため、「再生用の音声」として扱わせる（iOS 17以降）。対応していない端末では何もしない。
@@ -551,32 +586,44 @@
             g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
             sr.connect(f); f.connect(g); g.connect(dest); sr.start(t); sr.stop(t + dur + 0.02);
         }
-        function scheduleLoop(dest, t0) {
+        function scheduleLoop(dest, t0, tr) {
+            const step = 60 / tr.bpm / 2;
             for (let bar = 0; bar < 8; bar++) {
-                const notes = MEL[bar].split(" "), bass = BASS[CHORD[bar]];
+                const notes = tr.mel[bar].split(" "), bass = tr.bn[bar].split(" ").map(midi);
                 for (let st = 0; st < 8; st++) {
-                    const t = t0 + (bar * 8 + st) * STEP;
-                    if (notes[st] !== ".") tone(t, mtof(midi(notes[st])), STEP * 1.6, "square", 0.12, dest);
-                    if (st % 2 === 0) tone(t, mtof(bass[(st / 2) % 2]), STEP * 1.7, "triangle", 0.26, dest);
-                    if (st === 3 || st === 7) noise(t, 0.035, 7000, 1, 0.1, dest);
+                    const t = t0 + (bar * 8 + st) * step;
+                    if (notes[st] !== ".") tone(t, mtof(midi(notes[st])), step * tr.li[2], tr.li[0], tr.li[1], dest);
+                    if (st % 2 === 0) tone(t, mtof(bass[(st / 2) % 2]), step * tr.bi[2], tr.bi[0], tr.bi[1], dest);
+                    if (tr.kick && tr.kick.includes(st)) tone(t, 150, 0.12, "sine", 0.4, dest, 50);
+                    if (tr.snare && tr.snare.includes(st)) noise(t, 0.09, 1800, 0.8, 0.14, dest);
+                    if (tr.hat && tr.hat.includes(st)) noise(t, 0.035, tr.hf || 7000, 1, tr.hv || 0.1, dest);
                 }
             }
         }
-        function bgmTick() { if (!bgm || !ac) return; while (bgmNext < ac.currentTime + 3) { scheduleLoop(bgm, bgmNext); bgmNext += LOOP; } }
-        function bgmStart() {
-            wantBgm = true;
-            if (!ready() || bgm) return;
-            bgm = ac.createGain(); const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 3200;
-            bgm.gain.setValueAtTime(0, ac.currentTime); bgm.gain.linearRampToValueAtTime(BGM_LEVEL, ac.currentTime + 0.4);
+        function bgmTick() { if (!bgm || !ac || !curTr) return; while (bgmNext < ac.currentTime + 3) { scheduleLoop(bgm, bgmNext, curTr); bgmNext += loopLen(curTr); } }
+        function bgmStart(key) {     // key の曲を流す（同じ曲が流れていれば何もしない／別の曲なら切り替える）
+            wantKey = key; wantBgm = true;
+            if (!ready() || !TR[key]) return;
+            if (bgm && curKey === key) return;
+            if (bgm) killBgm();
+            const tr = TR[key]; curKey = key; curTr = tr;
+            bgm = ac.createGain(); const lp = ac.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = tr.lp;
+            bgm.gain.setValueAtTime(0, ac.currentTime); bgm.gain.linearRampToValueAtTime(BGM_LEVEL * (tr.vol || 1), ac.currentTime + 0.4);
             bgm.connect(lp); lp.connect(master); bgm._lp = lp;
             bgmNext = ac.currentTime + 0.1; bgmTick(); bgmTimer = setInterval(bgmTick, 1000);
         }
         function killBgm() {
-            clearInterval(bgmTimer); bgmTimer = null;
+            clearInterval(bgmTimer); bgmTimer = null; curKey = null; curTr = null;
             if (!bgm) return;
             const g = bgm, lp = g._lp; bgm = null;
             try { g.gain.cancelScheduledValues(ac.currentTime); g.gain.setValueAtTime(g.gain.value, ac.currentTime); g.gain.linearRampToValueAtTime(0, ac.currentTime + 0.25); } catch (e) {}
             setTimeout(() => { try { g.disconnect(); lp.disconnect(); } catch (e) {} }, 400);
+        }
+        // 画面 → 曲。孵化後の結果画面は、卵が割れて誕生音が鳴り終わるまで無音（resultOk が true になってから属性の曲）
+        function trackFor(id) {
+            if (id === "screen-quiz" || id === "screen-profile") return "quiz";
+            if (id === "screen-my-result") return resultOk ? resultKey : null;
+            return null;
         }
         function updateBtn() { const b = document.getElementById("snd-btn"); if (b) { b.textContent = on ? "🔊" : "🔇"; b.setAttribute("aria-pressed", on ? "false" : "true"); } }
         const api = {
@@ -589,15 +636,17 @@
                     playbackSession();
                     if (ac.state !== "running") ac.resume();
                     try { const sb = ac.createBufferSource(); sb.buffer = ac.createBuffer(1, 1, 22050); sb.connect(ac.destination); sb.start(0); } catch (e) {}   // 無音を1回鳴らして解禁
-                    if (wantBgm && on && !bgm) bgmStart();
+                    if (wantKey && on && !bgm) bgmStart(wantKey);
                 } catch (e) {}
             },
-            onScreen(id) { if (id === "screen-quiz") bgmStart(); else { wantBgm = false; killBgm(); } },
+            onScreen(id) { const k = trackFor(id); if (k) bgmStart(k); else { wantBgm = false; wantKey = null; killBgm(); } },
+            setResult(key) { resultKey = key; resultOk = false; },      // 孵化の開始時：属性の曲を用意（まだ流さない）
+            resultReady() { resultOk = true; const a = document.querySelector(".screen.active"); if (a && a.id === "screen-my-result") bgmStart(resultKey); },   // 誕生音のあと：属性の曲を流す
             toggle() {
                 api.unlock(); on = !on;
                 try { localStorage.setItem("tb_sound", on ? "1" : "0"); } catch (e) {}
                 if (master) master.gain.setTargetAtTime(on ? MASTER : 0, ac.currentTime, 0.05);
-                if (!on) killBgm(); else { if (wantBgm) bgmStart(); api.tap(2); }
+                if (!on) killBgm(); else { if (wantKey) bgmStart(wantKey); api.tap(2); }
                 updateBtn();
             },
             tap(v) {       // 5段階：そう思うほど高く上がり、思わないほど低く下がる
@@ -624,7 +673,7 @@
                 [72, 76, 79, 84].forEach(m => tone(t + 0.55, mtof(m), 1.3, "triangle", 0.17, master));
                 [96, 100, 103].forEach((m, i) => tone(t + 0.65 + i * 0.11, mtof(m), 0.25, "sine", 0.14, master));
             },
-            _test: { useContext(c) { ac = c; on = true; master = makeMaster(c); }, loop(dest, t0) { scheduleLoop(dest, t0); }, LOOP, state() { return { ctx: !!ac, bgm: !!bgm, on, wantBgm, acState: ac && ac.state }; } }
+            _test: { useContext(c) { ac = c; on = true; master = makeMaster(c); }, loop(dest, t0, key) { scheduleLoop(dest, t0, TR[key || "quiz"]); }, loopLen(key) { return loopLen(TR[key]); }, vol(key) { return TR[key].vol || 1; }, tracks: Object.keys(TR), LOOP, state() { return { ctx: !!ac, bgm: !!bgm, on, wantBgm, track: curKey, want: wantKey, acState: ac && ac.state }; } }
         };
         ["touchend", "click", "keydown"].forEach(ev => document.addEventListener(ev, api.unlock, { passive: true }));
         document.addEventListener("visibilitychange", () => { if (!ac) return; if (document.hidden) ac.suspend(); else if (on) ac.resume(); });
@@ -1012,7 +1061,7 @@
         hatchTimers.forEach(clearTimeout); hatchTimers = [];
         clearInterval(heroTimer);
         const el = document.getElementById('my-char'), stg = document.getElementById('hatch-stage');
-        if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) { SFX.birth(); startHero(); return; }
+        if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) { SFX.birth(); startHero(); hatchTimers.push(setTimeout(() => SFX.resultReady(), 1700)); return; }
         [0, 1, 2, 3].forEach(s => hatchTimers.push(setTimeout(() => {
             el.innerHTML = `<div class="${s >= 2 ? "shake2" : "shake"}">${eggSvg(s, "")}</div>`;
             SFX.crack(s);
@@ -1022,6 +1071,7 @@
             SFX.birth();
             startHero();
             hatchTimers.push(setTimeout(() => stg.classList.remove("flashing"), 700));
+            hatchTimers.push(setTimeout(() => SFX.resultReady(), 1700));   // 誕生音の余韻のあと、属性の曲が始まる
         }, 1900));
     }
     function initProfile() {
@@ -1053,6 +1103,7 @@
         document.getElementById('my-side').innerText = side;
         document.getElementById('my-extra').innerText = `${sg ? sg[1] + " " + sg[0] : "星座は秘密"}／${au[0]}属性${eto ? "／" + eto + "年" : ""}`;
         shareData.my = { saying: (PROFILE[t] || {}).saying, weak: (PROFILE[t] || {}).weak, type: t, className: job, sideJob: side, race, title: document.getElementById('my-title').innerText, extra: document.getElementById('my-extra').innerText, cfg: heroCfg };
+        SFX.setResult(sg ? sg[2] : (LIGHT_TYPES.includes(t) ? "light" : "dark"));
         showScreen('screen-my-result');
         playHatch();
     }
