@@ -272,9 +272,27 @@
 
     <!-- 画面1: メニュー画面 -->
     <div id="screen-menu" class="screen">
+        <div id="invite-box" class="result-box" style="display:none; text-align:center;">
+            <p id="invite-text" style="font-weight:bold; margin:0 0 8px;"></p>
+            <button onclick="inviteDiagnose()">📜 診断してから測る</button>
+            <button class="btn-secondary" onclick="inviteChoose()">👥 タイプを選んで測る</button>
+        </div>
         <p style="text-align: center; color: var(--text-sub);">あなたのギルド職種を判定し、他の冒険者との「限界会話時間」をシニカルに分析します。</p>
         <button onclick="startDiagnosis()">📜 職種診断を始める (全16問)</button>
         <button class="btn-secondary" onclick="showScreen('screen-compat')">👥 直接タイプを選んで相性判定</button>
+        <button class="btn-secondary" onclick="showDex()">📖 冒険者図鑑・称号</button>
+    </div>
+
+    <!-- 図鑑 -->
+    <div id="screen-dex" class="screen">
+        <h3>📖 冒険者図鑑</h3>
+        <p id="dex-sum" class="note"></p>
+        <div id="dex-grid" style="display:grid; grid-template-columns:repeat(2,1fr); gap:6px;"></div>
+        <div id="dex-frag" class="result-box" style="margin-top:12px;"></div>
+        <h3 style="margin-top:16px;">🏅 称号</h3>
+        <div id="dex-titles" class="result-box"></div>
+        <button class="btn-secondary" onclick="showScreen('screen-menu')">トップに戻る</button>
+        <button class="btn-secondary" onclick="resetDex()">記録を消す</button>
     </div>
 
     <!-- 画面2: 診断質問画面 -->
@@ -298,7 +316,7 @@
     <!-- 画面2.5: 孵化前のプロフィール（すべて任意） -->
     <div id="screen-profile" class="screen">
         <h3>🥚 もうすぐ孵化します</h3>
-        <p class="note">答えるほど、見た目と称号が細かくなります。どれも「答えたくない」でOK。入力した内容はこの端末の中だけで使われ、送信も保存もされません。</p>
+        <p class="note">答えるほど、見た目と称号が細かくなります。どれも「答えたくない」でOK。入力した内容はこの端末の中だけで使われ、送信されません。図鑑の記録（診断したタイプ・測った相性）だけ、この端末に保存されます。</p>
         <label>生まれ年（干支）:</label><select id="p-year"></select>
         <label>誕生月日（星座）:</label><div class="row2"><select id="p-month"></select><select id="p-day"></select></div>
         <label>血液型:</label>
@@ -328,10 +346,16 @@
             <p><strong>弱点:</strong> <span id="my-weak"></span></p>
             <p><strong>得意技:</strong> <span id="my-skill"></span></p>
             <p><strong>星座・属性:</strong> <span id="my-extra"></span></p>
+            <p><strong>鏡像:</strong> <span id="my-mirror"></span></p>
+            <p id="my-edge-row" style="display:none"><strong>揺らぎの称号:</strong> <span id="my-edge"></span></p>
             <div id="my-balance" class="bal-box"></div>
+            <p id="my-newtitle" class="note" style="margin:8px 0 0;"></p>
         </div>
         <button style="background:#d97706;" onclick="shareCard('my')">📤 結果をシェア（画像）</button>
         <button class="btn-secondary" onclick="window.open(xUrl('my'),'_blank')">𝕏 に文章だけ投稿</button>
+        <button class="btn-secondary" onclick="mirrorCompat()">🪞 <span class="nb">鏡像との</span><span class="nb">ブラック相性を測る</span></button>
+        <button class="btn-secondary" onclick="showDex()">📖 冒険者図鑑を見る</button>
+        <button style="background:#7c3aed;" onclick="shareInvite()">💌 <span class="nb">友達に相性を</span><span class="nb">測ってもらう（招待リンク）</span></button>
         <button onclick="goToCompatWithMyType()">🤝 <span class="nb">他のキャラとの</span><span class="nb">ブラック相性を測る</span></button>
         <button onclick="openRanking('screen-my-result', myCalculatedType)">🏆 <span class="nb">相性ベスト3／</span><span class="nb">ワースト3を見る</span></button>
         <button class="btn-secondary" onclick="showScreen('screen-menu')">トップに戻る</button>
@@ -376,7 +400,9 @@
             <p><strong>シチュエーション:</strong> <span id="res-situation"></span></p>
             <p><strong>限界会話時間:</strong> <span id="res-time" style="color: var(--danger-color); font-weight: bold;"></span></p>
             <p><strong>ブラック解説:</strong><br><span id="res-comment" style="line-height: 1.6;"></span></p>
+            <p id="res-mirror" class="note" style="display:none; color:#fbbf24;"></p>
             <p id="res-note" class="note"></p>
+            <p id="res-newtitle" class="note"></p>
         </div>
 
         <div class="ad-banner">
@@ -684,7 +710,7 @@
         function trackFor(id) {
             if (id === "screen-quiz" || id === "screen-profile") return "quiz";
             if (id === "screen-opening") return openingOn ? "opening" : null;   // 最初のタッチで音が解禁されてから流す
-            if (id === "screen-menu") return "menu";
+            if (id === "screen-menu" || id === "screen-dex") return "menu";
             if (id === "screen-compat" || id === "screen-rank") return "compat";
             if (id === "screen-result") return "verdict";
             if (id === "screen-my-result") return resultOk ? resultKey : null;
@@ -891,6 +917,7 @@
         selectA.value = keepA || "INTJ";
         selectB.value = keepB || "ENFP";
         selectR.value = keepR || "INTJ";
+        if (typeof renderInvite === 'function') renderInvite();
     }
 
     function initSituationOptions() {
@@ -1204,6 +1231,7 @@
         document.getElementById('my-side').innerText = side;
         document.getElementById('my-extra').innerText = `${sg ? sg[1] + " " + sg[0] : "星座は秘密"}／${au[0]}属性${eto ? "／" + eto + "年" : ""}`;
         shareData.my = { saying: (PROFILE[t] || {}).saying, weak: (PROFILE[t] || {}).weak, type: t, className: job, sideJob: side, race, title: document.getElementById('my-title').innerText, extra: document.getElementById('my-extra').innerText, cfg: heroCfg };
+        recordMyResult(t, job);
         SFX.setResult(sg ? sg[2] : (LIGHT_TYPES.includes(t) ? "light" : "dark"));
         showScreen('screen-my-result');
         playHatch();
@@ -1286,8 +1314,152 @@
     }
 
     function goToCompatWithMyType() {
-        document.getElementById('typeA').value = myCalculatedType;
+        if (inviteMode && inviteFrom) {   // 招待から来た人：Aに誘った人、Bに自分
+            document.getElementById('typeA').value = inviteFrom;
+            document.getElementById('typeB').value = myCalculatedType;
+            inviteMode = false;
+        } else {
+            document.getElementById('typeA').value = myCalculatedType;
+        }
         showScreen('screen-compat');
+    }
+
+    // ---------- 図鑑・称号・鏡像・揺らぎ・17番目の欠片（記録はこの端末の localStorage だけ） ----------
+    const DEX_KEY = "tb_dex_v1", ALL_TYPES = Object.keys(DEFAULT_CHARACTERS);
+    const FLIP = { E: "I", I: "E", S: "N", N: "S", T: "F", F: "T", J: "P", P: "J" };
+    const mirrorOf = t => t.split("").map(c => FLIP[c]).join("");
+    const MIRROR_MOVES = [   // 鏡像ペアだけの合体技（限界会話時間そのものは、通常の相性エンジンのまま）
+        ["INTJ", "ESFP", "三手先の計画を、その場のノリが三秒で壊す。", "予定は未定のまま完成"],
+        ["INTP", "ESFJ", "理屈を言い始めた瞬間、手作りクッキーを渡される。", "論破不能の優しさ"],
+        ["ENTJ", "ISFP", "指示が飛ぶ前に、相手がもう居ない。", "静かなる職場放棄"],
+        ["ENTP", "ISFJ", "思いつきで始めた企画を、全部こっそり片付けられる。", "尻拭いの極意"],
+        ["INFJ", "ESTP", "察する前に、もう行動が終わっている。", "先回りのすれ違い"],
+        ["INFP", "ESTJ", "「気持ちは？」と「期限は？」が同時に飛び交う。", "終わらない確認会議"],
+        ["ENFJ", "ISTP", "熱い励ましを、無言の整備で受け流す。", "温度差で蒸発"],
+        ["ENFP", "ISTJ", "ひらめきが全部、前例の壁に吸い込まれる。", "企画書の墓場"]
+    ];
+    function mirrorMove(a, b) { return MIRROR_MOVES.find(m => (m[0] === a && m[1] === b) || (m[0] === b && m[1] === a)) || null; }
+    const newDex = () => ({ v: 1, types: {}, mine: {}, jobs: {}, pairs: {}, sits: {}, edge: 0, mirror: 0, titles: [] });
+    function loadDex() {
+        try { const d = JSON.parse(localStorage.getItem(DEX_KEY) || "null"); if (d && d.v === 1) return Object.assign(newDex(), d); } catch (e) {}
+        return newDex();
+    }
+    let dex = loadDex();
+    function saveDex() { try { localStorage.setItem(DEX_KEY, JSON.stringify(dex)); } catch (e) {} }
+    const cnt = o => Object.keys(o).length;
+    // [称号名, 条件の説明, 判定]
+    const TITLE_DEFS = [
+        ["はじめての冒険者", "職種診断を1回する", () => cnt(dex.mine) >= 1],
+        ["顔見知り5人", "5タイプに出会う", () => cnt(dex.types) >= 5],
+        ["ギルドの常連", "10タイプに出会う", () => cnt(dex.types) >= 10],
+        ["図鑑コンプリート", "16タイプすべてに出会う", () => cnt(dex.types) >= ALL_TYPES.length],
+        ["相性ウォッチャー", "5組の相性を測る", () => cnt(dex.pairs) >= 5],
+        ["ブラック鑑定士", "20組の相性を測る", () => cnt(dex.pairs) >= 20],
+        ["全シチュ制覇", "すべてのシチュエーションで相性を測る", () => situations.length > 0 && situations.every(s => dex.sits[s.id])],
+        ["鏡の向こうの住人", "鏡像ペアの相性を測る", () => !!dex.mirror],
+        ["境界に立つ者", "軸が僅差（45〜55%）の診断結果が出る", () => !!dex.edge],
+        ["職種コレクター", "5種類の職種になる", () => cnt(dex.jobs) >= 5]
+    ];
+    const earnedTitles = () => TITLE_DEFS.filter(d => d[2]()).map(d => d[0]);
+    function noteNewTitles(elId) {   // 新しく得た称号を保存して、画面に出す
+        const now = earnedTitles(), fresh = now.filter(n => dex.titles.indexOf(n) < 0);
+        dex.titles = now; saveDex();
+        const el = document.getElementById(elId); if (el) el.textContent = fresh.length ? "🏅 新しい称号: " + fresh.join("、") : "";
+    }
+    function edgeAxes() { return AXIS_GROUPS.filter(g => Math.abs((myBalance[g] != null ? myBalance[g] : 50) - 50) <= 5); }
+    function edgeLabel() {
+        return edgeAxes().map(g => `「${AXIS_INFO[g][0]}と${AXIS_INFO[g][1]}の境界に立つ者」`).join("／");
+    }
+    function recordMyResult(t, job) {   // 孵化したとき
+        dex.types[t] = 1; dex.mine[t] = (dex.mine[t] || 0) + 1; if (job) dex.jobs[job] = 1;
+        if (edgeAxes().length) dex.edge = 1;
+        const mir = mirrorOf(t), c = characters[mir] || DEFAULT_CHARACTERS[mir];
+        document.getElementById('my-mirror').textContent = `${mir}（${c.name}）— 4軸すべて逆のタイプ`;
+        const ea = edgeAxes();
+        document.getElementById('my-edge-row').style.display = ea.length ? '' : 'none';
+        document.getElementById('my-edge').textContent = edgeLabel();
+        noteNewTitles('my-newtitle');
+    }
+    function recordCompat(a, b, sitId) {   // 相性を測ったとき。鏡像ペアなら合体技を返す
+        dex.types[a] = 1; dex.types[b] = 1; dex.pairs[[a, b].sort().join("|")] = 1; dex.sits[sitId] = 1;
+        const mv = (mirrorOf(a) === b) ? mirrorMove(a, b) : null;
+        if (mv) dex.mirror = 1;
+        const el = document.getElementById('res-mirror');
+        el.style.display = mv ? '' : 'none';
+        el.textContent = mv ? `🪞 鏡像ペアの合体技《${mv[3]}》：${mv[2]}` : '';
+        noteNewTitles('res-newtitle');
+    }
+    function mirrorCompat() {
+        document.getElementById('typeA').value = myCalculatedType;
+        document.getElementById('typeB').value = mirrorOf(myCalculatedType);
+        showScreen('screen-compat');
+    }
+    function showDex() {
+        const grid = document.getElementById('dex-grid'); grid.innerHTML = '';
+        ALL_TYPES.forEach(code => {
+            const met = !!dex.types[code], c = characters[code] || DEFAULT_CHARACTERS[code];
+            const d = document.createElement('div'); d.className = 'result-box'; d.style.cssText = 'margin:0; padding:8px; text-align:center;' + (met ? '' : 'opacity:.55;');
+            const a = document.createElement('div'); a.style.fontWeight = 'bold'; a.textContent = met ? code : '？？？？';
+            const b = document.createElement('div'); b.className = 'sub'; b.style.fontSize = '0.8rem'; b.textContent = met ? c.name : 'まだ出会っていない';
+            d.appendChild(a); d.appendChild(b); grid.appendChild(d);
+        });
+        document.getElementById('dex-sum').textContent = `出会ったタイプ ${cnt(dex.types)}/${ALL_TYPES.length}　／　測った相性 ${cnt(dex.pairs)}組　／　なった職種 ${cnt(dex.jobs)}/${ALL_TYPES.length * 4}`;
+        const fr = document.getElementById('dex-frag'); fr.innerHTML = '';
+        const h = document.createElement('p'); h.style.fontWeight = 'bold'; h.style.margin = '0 0 4px';
+        const body = document.createElement('p'); body.style.margin = '0'; body.className = 'sub';
+        if (cnt(dex.types) >= ALL_TYPES.length) {
+            const top = Object.keys(dex.mine).sort((x, y) => dex.mine[y] - dex.mine[x])[0];
+            const topName = top ? ((characters[top] || DEFAULT_CHARACTERS[top]).name) : '名もなき冒険者';
+            const total = Object.keys(dex.mine).reduce((s, k) => s + dex.mine[k], 0);
+            h.textContent = '✨ 17番目の欠片：万華鏡の語り部';
+            body.textContent = `16タイプすべてに出会ったあなたの履歴から生まれた、隠しキャラ。診断${total}回・相性${cnt(dex.pairs)}組。いちばん多く映した姿は「${topName}」。全員のブラックを知りすぎて、もう誰にも驚かない。`;
+        } else {
+            h.textContent = '❓ 17番目の欠片：？？？';
+            body.textContent = `16タイプすべてに出会うと現れる（診断で生まれる・相性で選ぶと出会ったことになる）。あと${ALL_TYPES.length - cnt(dex.types)}タイプ。`;
+        }
+        fr.appendChild(h); fr.appendChild(body);
+        const tl = document.getElementById('dex-titles'); tl.innerHTML = '';
+        TITLE_DEFS.forEach(d => {
+            const on = d[2](), p = document.createElement('p'); p.style.margin = '4px 0';
+            p.textContent = (on ? '🏅 ' + d[0] : '🔒 ' + d[0]) + '　' + d[1]; if (!on) p.style.opacity = '.6';
+            tl.appendChild(p);
+        });
+        showScreen('screen-dex');
+    }
+    function resetDex() {
+        if (!confirm('図鑑と称号の記録をすべて消します。よろしいですか？')) return;
+        dex = newDex(); saveDex(); showDex();
+    }
+
+    // ---------- 招待リンク（?a=タイプ。タイプ記号だけをURLに入れる） ----------
+    let inviteFrom = null, inviteMode = false;
+    function parseInvite() {
+        const m = /[?&]a=([A-Za-z]{4})(&|#|$)/.exec(location.search);
+        const code = m ? m[1].toUpperCase() : null;
+        return code && Object.prototype.hasOwnProperty.call(DEFAULT_CHARACTERS, code) ? code : null;   // 16タイプ以外は無視
+    }
+    function inviteUrl(code) { return location.href.split(/[?#]/)[0] + "?a=" + code; }
+    function renderInvite() {
+        const box = document.getElementById('invite-box');
+        if (!box) return;
+        if (!inviteFrom) { box.style.display = 'none'; return; }
+        const c = characters[inviteFrom] || DEFAULT_CHARACTERS[inviteFrom];
+        document.getElementById('invite-text').textContent = `${c.name}（${inviteFrom}）から、相性を測ろうと誘われています！`;
+        box.style.display = '';
+    }
+    function inviteDiagnose() { inviteMode = true; startDiagnosis(); }
+    function inviteChoose() {
+        document.getElementById('typeA').value = inviteFrom;
+        showScreen('screen-compat');
+    }
+    async function shareInvite() {
+        const url = inviteUrl(myCalculatedType), text = `私と相性を測ろう！あなたとの限界会話時間は何分？ ${HASH}`;
+        if (navigator.share) {
+            try { await navigator.share({ text, url }); return; }
+            catch (e) { if (e && e.name === "AbortError") return; }
+        }
+        try { await navigator.clipboard.writeText(url); alert("招待リンクをコピーしました。友達に送ってください。\n" + url); }
+        catch (e) { prompt("このリンクをコピーして、友達に送ってください", url); }
     }
 
 
@@ -1585,6 +1757,7 @@
         adBtn.disabled = false;
         adBtn.innerText = `【動画広告】ポーションを服用する (+${AD_BONUS_MINUTES}分延長)`;
 
+        recordCompat(typeA, typeB, sit.id);
         shareData.compat = { a: typeA, b: typeB, nameA: nameA, nameB: nameB, sitName: sit.name, comment: data.black_comment, item: data.recovery_item };
         showScreen('screen-result');
         startCompatScene(typeA, typeB, currentLimit);
@@ -1603,7 +1776,10 @@
     }
 
     // ?op=0 を付けるとオープニングを飛ばす（テスト・共有リンク用）。他の変数の宣言がすべて終わった、スクリプトの最後で行う
-    if (/[?&]op=0(&|$)/.test(location.search)) showScreen('screen-menu');
+    inviteFrom = parseInvite();
+    if (inviteFrom) renderInvite();
+    // ?op=0、または有効な招待リンク（?a=）のときはオープニングを飛ばす
+    if (/[?&]op=0(&|$)/.test(location.search) || inviteFrom) showScreen('screen-menu');
 </script>
 
 </body>
