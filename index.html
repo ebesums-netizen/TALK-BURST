@@ -281,7 +281,24 @@
         <button id="btn-dungeon" onclick="startDungeon()" style="display:none">⚔ 冒険に出る（ダンジョン診断）</button>
         <button id="btn-quick" onclick="startDiagnosis()">📜 職種診断を始める (全16問)</button>
         <button class="btn-secondary" onclick="showScreen('screen-compat')">👥 直接タイプを選んで相性判定</button>
+        <button id="btn-garden" class="btn-secondary" onclick="openGarden()" style="display:none">🌱 今日の庭</button>
         <button class="btn-secondary" onclick="showDex()">📖 冒険者図鑑・称号</button>
+    </div>
+
+    <!-- 今日の庭 -->
+    <div id="screen-garden" class="screen">
+        <h3>🌱 今日の庭 <span id="garden-date" class="note" style="font-weight:normal"></span></h3>
+        <p id="garden-status" class="note" style="margin:0 0 8px;"></p>
+        <div id="garden-plants" style="display:grid; grid-template-columns:repeat(2,1fr); gap:6px;"></div>
+        <div class="result-box" style="margin-top:12px;">
+            <p style="font-weight:bold; margin:0 0 4px;">今月の傾き（直近30日）</p>
+            <div id="garden-bars"></div>
+            <p id="garden-change" style="margin:8px 0 0;"></p>
+            <p id="garden-newtitle" class="note" style="margin:8px 0 0;"></p>
+        </div>
+        <p class="note">毎日の2択で、気分や日によって揺れます。診断ではなく、傾向として見てください。</p>
+        <button id="garden-go" onclick="openGarden()">🌱 今日の場面に答える</button>
+        <button class="btn-secondary" onclick="showScreen('screen-menu')">トップに戻る</button>
     </div>
 
     <!-- 図鑑 -->
@@ -728,7 +745,7 @@
         function trackFor(id) {
             if (id === "screen-quiz" || id === "screen-scene" || id === "screen-profile") return "quiz";
             if (id === "screen-opening") return openingOn ? "opening" : null;   // 最初のタッチで音が解禁されてから流す
-            if (id === "screen-menu" || id === "screen-dex") return "menu";
+            if (id === "screen-menu" || id === "screen-dex" || id === "screen-garden") return "menu";
             if (id === "screen-compat" || id === "screen-rank") return "compat";
             if (id === "screen-result") return "verdict";
             if (id === "screen-my-result") return resultOk ? resultKey : null;
@@ -1460,7 +1477,10 @@
         ["全シチュ制覇", "すべてのシチュエーションで相性を測る", () => situations.length > 0 && situations.every(s => dex.sits[s.id])],
         ["鏡の向こうの住人", "鏡像ペアの相性を測る", () => !!dex.mirror],
         ["境界に立つ者", "軸が僅差の診断結果が出る（クイック診断は45〜55%／ダンジョン診断は3軸以上が3対2）", () => !!dex.edge],
-        ["職種コレクター", "5種類の職種になる", () => cnt(dex.jobs) >= 5]
+        ["職種コレクター", "5種類の職種になる", () => cnt(dex.jobs) >= 5],
+        ["庭の種まき", "今日の庭を1日記録する", () => gardenDayCount() >= 1],
+        ["七日の庭", "今日の庭を7日記録する", () => gardenDayCount() >= 7],
+        ["ひと月の庭", "今日の庭を30日記録する", () => gardenDayCount() >= 30]
     ];
     const earnedTitles = () => TITLE_DEFS.filter(d => d[2]()).map(d => d[0]);
     function noteNewTitles(elId) {   // 新しく得た称号を保存して、画面に出す
@@ -1556,6 +1576,7 @@
         try {
             const on = featureOn('dungeon');
             document.getElementById('btn-dungeon').style.display = on ? '' : 'none';
+            document.getElementById('btn-garden').style.display = featureOn('garden') ? '' : 'none';
             document.getElementById('btn-quick').textContent = on ? '⚡ クイック診断（全16問）' : '📜 職種診断を始める (全16問)';
             document.getElementById('btn-quick').className = on ? 'btn-secondary' : '';
         } catch (e) { /* 画面の準備前は何もしない */ }
@@ -1588,7 +1609,7 @@
         ["S305", "JP", "J", "パーティの作戦会議が始まった。", "役割と手順を決めてから動く", "状況を見て、臨機応変に動く", "🎲"],
         ["S306", "JP", "J", "旅の最終日、半日だけ時間が余った。", "予定していた土産を買いに行く", "目に入った脇道へ、ふらっと入る", "🧳"],
     ];
-    let dungeonList = [], dungeonIdx = 0, lastDiagMode = "quick";
+    let dungeonList = [], dungeonIdx = 0, lastDiagMode = "quick", sceneMode = "dungeon";
     function sceneSource() {   // シートの場面が各軸5つ以上あれば使い、足りなければ内蔵データ
         const n = TB_CONFIG.SCENES_PER_AXIS;
         const sheet = scenes.filter(s => s.tag !== "daily");
@@ -1609,14 +1630,14 @@
         return out;
     }
     function startDungeon() {
-        SFX.unlock(); lastDiagMode = "dungeon";
+        SFX.unlock(); lastDiagMode = "dungeon"; sceneMode = "dungeon";
         dungeonList = buildDungeon(); dungeonIdx = 0; hopNext = "";
         axisSum = {}; axisN = {}; axisLast = {}; myBalance = {};
         renderScene(); showScreen('screen-scene');
     }
     function renderScene() {
         const s = dungeonList[dungeonIdx];
-        document.getElementById('sc-progress').textContent = `場面 ${dungeonIdx + 1} / ${dungeonList.length}`;
+        document.getElementById('sc-progress').textContent = `${sceneMode === "daily" ? "今日の庭" : "場面"} ${dungeonIdx + 1} / ${dungeonList.length}`;
         document.getElementById('sc-emoji').textContent = s.emoji || "🗝️";
         document.getElementById('sc-text').textContent = s.text;
         document.getElementById('sc-b0').textContent = s.posFirst ? s.cp : s.cn;
@@ -1628,6 +1649,7 @@
         hopNext = "";
     }
     function answerScene(k) {
+        if (sceneMode === "daily") { answerDaily(k); return; }
         const s = dungeonList[dungeonIdx], chosenPos = (k === 0) === s.posFirst, v = chosenPos ? 2 : -2;
         SFX.tap(v);
         const g = s.axis, d = s.pos === g[0] ? v : -v;
@@ -1636,6 +1658,116 @@
         hopNext = chosenPos ? "hopL" : "hopR";
         dungeonIdx++;
         if (dungeonIdx < dungeonList.length) renderScene(); else calculateTypeResult();
+    }
+
+    // ---------- 今日の庭（毎日2場面。日付は日本時間。記録は端末内） ----------
+    const DEFAULT_DAILY = [   // 毎日の庭用の内蔵場面（形式は DEFAULT_SCENES と同じ）
+        ["D001", "EI", "E", "今日は、依頼のない休日。", "誰かを誘って出かける", "一人で好きなことをして過ごす", "☀️"],
+        ["D002", "EI", "E", "ギルドの掲示板の前に、人だかりができている。", "輪に入って話を聞く", "人が減るまで、離れて待つ", "📌"],
+        ["D003", "EI", "E", "仲間の誕生日会に呼ばれた。", "最後まで残って盛り上げる", "顔を出して、早めに帰る", "🎂"],
+        ["D004", "EI", "E", "冒険の自慢話を聞かせてほしいと頼まれた。", "身振りを交えて思いきり話す", "要点だけ、短く話す", "🗣️"],
+        ["D101", "SN", "S", "今夜の晩ごはんに、新メニューが出ている。", "食べ慣れた定番を選ぶ", "名前だけで気になるほうを選ぶ", "🍲"],
+        ["D102", "SN", "S", "買ったばかりの魔道具の説明書が、分厚い。", "最初から順に読む", "とりあえず触って覚える", "📘"],
+        ["D103", "SN", "S", "夜空を見上げた。", "星の位置と名前を確かめる", "星をつないで物語を想像する", "🌌"],
+        ["D104", "SN", "S", "市場で、値札のない珍品を見つけた。", "状態を調べて、相場と比べる", "使い道を想像して、買ってしまう", "🏺"],
+        ["D201", "TF", "T", "仲間が、手作りの料理を自信満々に出してきた。", "正直に、味の感想を伝える", "まず、喜んで食べる", "🍳"],
+        ["D202", "TF", "T", "友人に「どちらの装備がいい？」と聞かれた。", "性能を比べて、理由つきで答える", "本人が気に入るほうを勧める", "🛡️"],
+        ["D203", "TF", "T", "仲間が、約束に30分遅れてきた。", "理由を聞いて、次の対策を決める", "事情を察して、笑って迎える", "⏰"],
+        ["D204", "TF", "T", "仲間が、依頼の報告書を書いてくれた。", "誤りを直して、読みやすくする", "まず礼を言って、そのまま出す", "📄"],
+        ["D301", "JP", "J", "明日は、丸一日予定がない。", "前の晩に、やることを決めておく", "朝起きた気分で決める", "🗓️"],
+        ["D302", "JP", "J", "荷造りの途中で、新しい道具が目に入った。", "予算外なので、見送る", "気になるので、一つ加える", "🧰"],
+        ["D303", "JP", "J", "ギルドの集合は、朝九時。", "三十分前に着くように出る", "時間ぎりぎりに、走って着く", "🚪"],
+        ["D304", "JP", "J", "机の上に、未整理の依頼書が山積みだ。", "種類別に分けて、順に片づける", "目についたものから手をつける", "📚"],
+    ];
+    const nowMs = () => (window.__TB_NOW__ || Date.now());   // テストで時刻を固定するための入口
+    const todayJst = () => new Date(nowMs() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+    const dayNumberOf = s => /^\d{4}-\d{2}-\d{2}$/.test(s) ? Math.floor(Date.parse(s + "T00:00:00Z") / 86400000) : NaN;
+    const GARDEN_PAIRS = [["EI", "SN"], ["TF", "JP"], ["EI", "TF"], ["SN", "JP"], ["EI", "JP"], ["SN", "TF"]];   // 6日で、どの軸も3回ずつ
+    function gardenPool(g) {   // シートの daily／both の場面が各軸3つ以上あればシート、なければ内蔵（庭用＋診断用の場面）
+        const sheet = scenes.filter(s => s.tag !== "dungeon");
+        if (AXIS_GROUPS.every(x => sheet.filter(s => s.axis === x).length >= 3)) return sheet.filter(s => s.axis === g).sort((a, b) => a.id < b.id ? -1 : 1);
+        return DEFAULT_DAILY.concat(DEFAULT_SCENES).filter(a => a[1] === g).sort((a, b) => a[0] < b[0] ? -1 : 1)
+            .map(a => ({ id: a[0], axis: a[1], pos: a[2], text: a[3], cp: a[4], cn: a[5], emoji: a[6] }));
+    }
+    function dayScenes(dateStr) {   // その日の2場面（同じ日は同じ場面。日が進むと順に変わり、プールを一巡するまで重ならない）
+        const d = dayNumberOf(dateStr), r = ((d % 6) + 6) % 6, base = Math.floor(d / 6);
+        return GARDEN_PAIRS[r].slice(0, TB_CONFIG.DAILY_SCENES).map(g => {
+            const per = GARDEN_PAIRS.filter(x => x.includes(g)).length;
+            const before = GARDEN_PAIRS.slice(0, r).filter(x => x.includes(g)).length;
+            const pool = gardenPool(g), a = base * per + before;
+            return pool[((a % pool.length) + pool.length) % pool.length];
+        });
+    }
+    function gardenDays() {   // 未来の日付（端末の時計の誤り）は数えない
+        const today = dayNumberOf(todayJst()), o = {};
+        Object.keys(state.garden.days).forEach(k => { const n = dayNumberOf(k); if (!isNaN(n) && n <= today) o[k] = state.garden.days[k]; });
+        return o;
+    }
+    const gardenDayCount = () => Object.keys(gardenDays()).filter(k => Object.keys(state.garden.days[k]).length > 0).length;
+    function gardenSummary(days, today) {   // 軸ごとに、直近30日と、その前の30日の傾き（0〜100。50＝中間）
+        const t = dayNumberOf(today), out = {};
+        AXIS_GROUPS.forEach(g => {
+            let rs = 0, rn = 0, ps = 0, pn = 0;
+            Object.keys(days).forEach(k => {
+                const dn = dayNumberOf(k), v = days[k][g]; if (isNaN(dn) || dn > t || (v !== 1 && v !== -1)) return;
+                const age = t - dn; if (age < 30) { rs += v; rn++; } else if (age < 60) { ps += v; pn++; }
+            });
+            const rb = rn ? 50 + rs / rn * 50 : null, pb = pn ? 50 + ps / pn * 50 : null;
+            const diff = (rb != null && pb != null && rn >= 5 && pn >= 5) ? rb - pb : null;
+            out[g] = { rn, rb, pn, pb, diff, change: diff != null && Math.round(Math.abs(diff) * 10) / 10 >= TB_CONFIG.GARDEN_DIFF_PT };
+        });
+        return out;
+    }
+    function openGarden() {
+        const today = todayJst(), done = state.garden.days[today] || {};
+        const todo = dayScenes(today).filter(s => s && !(s.axis in done));
+        if (!todo.length) { showGarden(); return; }
+        SFX.unlock(); sceneMode = "daily"; hopNext = "";
+        dungeonList = todo.map(s => Object.assign({ posFirst: Math.random() < 0.5 }, s)); dungeonIdx = 0;
+        renderScene(); showScreen('screen-scene');
+    }
+    function answerDaily(k) {
+        const s = dungeonList[dungeonIdx], chosenPos = (k === 0) === s.posFirst, today = todayJst();
+        SFX.tap(chosenPos ? 2 : -2);
+        const d = (s.pos === s.axis[0]) === chosenPos ? 1 : -1;   // 軸の1文字目の側に傾いたら +1
+        if (!state.garden.days[today]) state.garden.days[today] = {};
+        state.garden.days[today][s.axis] = d;
+        const keys = Object.keys(state.garden.days).sort();   // 古い記録を残しすぎない
+        while (keys.length > TB_CONFIG.GARDEN_KEEP_DAYS) delete state.garden.days[keys.shift()];
+        saveState();
+        hopNext = chosenPos ? "hopL" : "hopR";
+        dungeonIdx++;
+        if (dungeonIdx < dungeonList.length) renderScene(); else showGarden();
+    }
+    const PLANTS = { EI: ["🌻", "🍄"], SN: ["🌳", "🌸"], TF: ["🌵", "🌷"], JP: ["🎋", "🌼"] };
+    function showGarden() {
+        const today = todayJst(), sum = gardenSummary(gardenDays(), today), done = state.garden.days[today] || {};
+        const remain = dayScenes(today).filter(s => s && !(s.axis in done)).length;
+        document.getElementById('garden-date').textContent = today.slice(5).replace("-", "/");
+        document.getElementById('garden-status').textContent = `記録した日数 ${gardenDayCount()}日　／　` + (remain ? `今日はあと${remain}場面` : "今日の分はおしまい。また明日");
+        document.getElementById('garden-go').style.display = remain ? '' : 'none';
+        const grid = document.getElementById('garden-plants'); grid.innerHTML = '';
+        const bars = document.getElementById('garden-bars'); bars.innerHTML = '';
+        AXIS_GROUPS.forEach(g => {
+            const x = sum[g], enough = x.rn >= 3;
+            const tile = document.createElement('div'); tile.className = 'result-box'; tile.style.cssText = 'margin:0; padding:8px; text-align:center;';
+            const em = document.createElement('div'); em.style.fontSize = '2rem'; em.textContent = !enough ? "🌰" : x.rb >= 60 ? PLANTS[g][0] : x.rb <= 40 ? PLANTS[g][1] : "🌱";
+            const cap = document.createElement('div'); cap.className = 'sub'; cap.style.fontSize = '0.8rem';
+            cap.textContent = !enough ? `${AXIS_INFO[g][0]}・${AXIS_INFO[g][1]}（種）` : x.rb >= 50 ? `${AXIS_INFO[g][0]}寄り ${Math.round(x.rb)}%` : `${AXIS_INFO[g][1]}寄り ${Math.round(100 - x.rb)}%`;
+            tile.appendChild(em); tile.appendChild(cap); grid.appendChild(tile);
+            const row = document.createElement('p'); row.style.cssText = 'margin:3px 0; font-size:0.85rem;';
+            const w = enough ? Math.round(x.rb) : 50;
+            row.innerHTML = `<span></span>`; row.firstChild.textContent = `${AXIS_INFO[g][0]} `;
+            const bar = document.createElement('span'); bar.style.cssText = 'display:inline-block; width:90px; height:8px; margin:0 8px; background:#3a3a52; border-radius:4px; vertical-align:middle; position:relative;';
+            const dot = document.createElement('i'); dot.style.cssText = `position:absolute; top:-2px; left:calc(${w}% - 6px); width:12px; height:12px; border-radius:50%; background:#d97706;`;
+            bar.appendChild(dot); row.appendChild(bar); row.appendChild(document.createTextNode(` ${AXIS_INFO[g][1]}`)); bars.appendChild(row);
+        });
+        const changed = AXIS_GROUPS.filter(g => sum[g].change);
+        const ch = document.getElementById('garden-change');
+        if (changed.length) ch.textContent = changed.map(g => `🍃 先月より「${AXIS_INFO[g][sum[g].diff > 0 ? 0 : 1]}寄り」の日が多かった`).join("　");
+        else ch.textContent = AXIS_GROUPS.some(g => sum[g].diff != null) ? "先月と比べて、はっきりした変化はありません。" : "先月の記録がたまると、変化をお知らせします。";
+        noteNewTitles('garden-newtitle');
+        showScreen('screen-garden');
     }
 
     // ---------- 招待リンク（?a=タイプ。タイプ記号だけをURLに入れる） ----------
