@@ -292,6 +292,8 @@
         <h3 style="margin-top:16px;">🏅 称号</h3>
         <div id="dex-titles" class="result-box"></div>
         <button class="btn-secondary" onclick="showScreen('screen-menu')">トップに戻る</button>
+        <button class="btn-secondary" onclick="exportCode()">📤 引き継ぎコードを作る</button>
+        <button class="btn-secondary" onclick="importCode()">📥 コードを読み込む</button>
         <button class="btn-secondary" onclick="resetDex()">記録を消す</button>
     </div>
 
@@ -548,6 +550,7 @@
     const AXIS_INFO = { EI: ["外向", "内向"], SN: ["現実", "直感"], TF: ["論理", "感情"], JP: ["計画", "柔軟"] };
 
     // ---------- 状態 ----------
+    let scenes = [], missions = [];     // シートの Scenes / Missions（空なら内蔵データを使う。内蔵データは段階2・4で追加）
     let characters = JSON.parse(JSON.stringify(DEFAULT_CHARACTERS));
     let jobs = JSON.parse(JSON.stringify(JOBS)), baseAxis = Object.assign({}, BASE_AXIS);
     let sideJobs = Object.assign({}, SIDE_JOBS), noSideJob = NO_SIDE_JOB, raceNames = Object.assign({}, RACE_NAMES), raceDefault = RACE_DEFAULT;
@@ -831,6 +834,7 @@
         sideJobs = Object.assign({}, SIDE_JOBS); noSideJob = NO_SIDE_JOB; raceNames = Object.assign({}, RACE_NAMES); raceDefault = RACE_DEFAULT;
         for (const k in PROFILE_DEFAULT) PROFILE[k] = Object.assign({}, PROFILE_DEFAULT[k]);
         questions = DEFAULT_QUESTIONS.slice(); situations = DEFAULT_SITUATIONS.slice();
+        scenes = []; missions = [];
     }
 
     // シートの内容を検証してから採用（空欄・長すぎる・禁止語を含む行は読み飛ばし、内蔵データを維持）
@@ -838,8 +842,23 @@
     const cleanText = (v, max) => { const t = String(v == null ? "" : v).trim(); return (t && t.length <= max && !BAD_WORDS.test(t)) ? t : ""; };
     const isYes = v => ["TRUE", "1", "YES", "○", "★", "はい"].includes(String(v == null ? "" : v).trim().toUpperCase());
     const typeCodeOf = r => String(r.type_code || r.mbti_type || "").trim().toUpperCase();
+    function parseScenesMissions(d) {
+        const seen = {};
+        if (Array.isArray(d.scenes)) d.scenes.forEach(r => {
+            const id = cleanText(r.scene_id, 10), ax = String(r.axis || "").trim().toUpperCase(), pos = String(r.pos || "").trim().toUpperCase();
+            const g = AXIS_GROUPS.find(x => x === ax), text = cleanText(r.scene, 60), cp = cleanText(r.choice_pos, 24), cn = cleanText(r.choice_neg, 24);
+            const tag = String(r.tag || "both").trim().toLowerCase();
+            if (!id || seen[id] || !g || pos.length !== 1 || !g.includes(pos) || !text || !cp || !cn || ["dungeon", "daily", "both"].indexOf(tag) < 0) return;
+            seen[id] = 1; scenes.push({ id, axis: g, pos, text, cp, cn, tag, emoji: cleanText(r.scene_emoji, 4) || "🗝️" });
+        });
+        if (Array.isArray(d.missions)) d.missions.forEach(r => {
+            const cls = String(r.pair_class || "").trim(), id = cleanText(r.mission_id, 10), text = cleanText(r.text, 60), xp = Math.round(+r.xp || 1);
+            if (/^[01]{4}$/.test(cls) && id && text) missions.push({ id, cls, text, xp: Math.max(1, Math.min(3, xp)) });
+        });
+    }
     function applyMasterData(d) {
         resetMaster();
+        parseScenesMissions(d);
         if (Array.isArray(d.characters)) {      // 特徴（catch_phrase）の上書きのみ。職種名は Jobs シートで管理
             d.characters.forEach(r => {
                 const code = typeCodeOf(r), c = cleanText(r.catch_phrase, 30);
@@ -1325,7 +1344,19 @@
     }
 
     // ---------- 図鑑・称号・鏡像・揺らぎ・17番目の欠片（記録はこの端末の localStorage だけ） ----------
-    const DEX_KEY = "tb_dex_v1", ALL_TYPES = Object.keys(DEFAULT_CHARACTERS);
+    // ---------- 調整用の設定（あとから使い心地を直すときは、まずここの数字とフラグを変える） ----------
+    const TB_CONFIG = {
+        FEATURES: { dungeon: false, garden: false, persona: false, mission: false, arena: false, party: false },   // 段階ごとに true にして公開
+        SCENES_PER_AXIS: 5,      // ダンジョン診断：1軸の場面数（奇数＝同点が出ない）
+        EDGE_MIN_AXES: 3,        // 揺らぎの称号：3対2の軸がこの数以上
+        GARDEN_DIFF_PT: 30,      // 庭：今月と先月の傾きの差がこのpt以上の軸だけ「変化」として出す
+        DAILY_SCENES: 2,         // 庭：1日の場面数
+        PERSONA_DIFF_PT: 40,     // ペルソナ：視点間の差がこのpt以上の軸を「ズレ候補」にする
+        PERSONA_PER_AXIS: 3,     // ペルソナ：1視点・1軸の場面数
+        GARDEN_KEEP_DAYS: 400,   // 庭の記録を残す日数
+        BOND_LEVELS: [0, 3, 8, 15, 25]   // 絆レベル1〜5に必要なポイント
+    };
+    const STATE_KEY = "tb_state_v2", DEX_KEY = "tb_dex_v1", ALL_TYPES = Object.keys(DEFAULT_CHARACTERS);
     const FLIP = { E: "I", I: "E", S: "N", N: "S", T: "F", F: "T", J: "P", P: "J" };
     const mirrorOf = t => t.split("").map(c => FLIP[c]).join("");
     const MIRROR_MOVES = [   // 鏡像ペアだけの合体技（限界会話時間そのものは、通常の相性エンジンのまま）
@@ -1340,12 +1371,63 @@
     ];
     function mirrorMove(a, b) { return MIRROR_MOVES.find(m => (m[0] === a && m[1] === b) || (m[0] === b && m[1] === a)) || null; }
     const newDex = () => ({ v: 1, types: {}, mine: {}, jobs: {}, pairs: {}, sits: {}, edge: 0, mirror: 0, titles: [] });
-    function loadDex() {
-        try { const d = JSON.parse(localStorage.getItem(DEX_KEY) || "null"); if (d && d.v === 1) return Object.assign(newDex(), d); } catch (e) {}
-        return newDex();
+    // 端末の保存は tb_state_v2 に一本化（図鑑・庭・絆・ペルソナ・カード）。古い tb_dex_v1 は読むだけで消さない（戻せるように）
+    const newState = () => ({ v: 2, dex: newDex(), garden: { days: {} }, bond: {}, persona: {}, card: { wins: 0, losses: 0 } });
+    const isPlain = o => !!o && typeof o === "object" && !Array.isArray(o);
+    const BAD_KEYS = ["__proto__", "constructor", "prototype"];
+    const okPair = k => /^[A-Z]{4}\|[A-Z]{4}$/.test(k) && k.split("|").every(x => ALL_TYPES.includes(x));
+    const small = (v, max) => { const n = Math.floor(+v); return isFinite(n) && n > 0 ? Math.min(n, max) : 0; };   // 負数・非数は0、大きすぎる値は上限に丸める
+    function sanitizeState(s) {   // 保存データ・引き継ぎコードの中身を検査して、安全な形だけ取り出す
+        if (!isPlain(s) || s.v !== 2 || !isPlain(s.dex)) return null;   // 図鑑の本体がない保存・コードは受け付けない（空で上書きしてしまわないため）
+        const st = newState(), d = s.dex;
+        const each = (o, fn) => { if (isPlain(o)) Object.keys(o).forEach(k => { if (BAD_KEYS.indexOf(k) < 0 && k.length <= 40) fn(k, o[k]); }); };
+        each(d.types, (k, v) => { if (ALL_TYPES.includes(k)) st.dex.types[k] = 1; });
+        each(d.mine, (k, v) => { if (ALL_TYPES.includes(k)) st.dex.mine[k] = small(v, 99999) || 1; });
+        each(d.jobs, (k, v) => { if (k.length <= 20) st.dex.jobs[k] = 1; });
+        each(d.pairs, (k, v) => { if (okPair(k)) st.dex.pairs[k] = 1; });
+        each(d.sits, (k, v) => { if (k.length <= 10) st.dex.sits[k] = 1; });
+        st.dex.edge = d.edge ? 1 : 0; st.dex.mirror = d.mirror ? 1 : 0;
+        if (Array.isArray(d.titles)) st.dex.titles = d.titles.filter(x => typeof x === "string" && x.length <= 30).slice(0, 50);
+        each(isPlain(s.garden) ? s.garden.days : null, (k, v) => {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(k) || !isPlain(v)) return;
+            const day = {}; AXIS_GROUPS.forEach(g => { if (v[g] === 1 || v[g] === -1) day[g] = v[g]; });
+            st.garden.days[k] = day;
+        });
+        each(s.bond, (k, v) => { if (okPair(k) && isPlain(v)) st.bond[k] = { xp: small(v.xp, 999), done: Array.isArray(v.done) ? v.done.filter(x => typeof x === "string" && x.length <= 10).slice(0, 200) : [] }; });
+        if (isPlain(s.persona)) ["ideal", "others", "real"].forEach(k => {
+            if (isPlain(s.persona[k])) { const o = {}; AXIS_GROUPS.forEach(g => { const n = +s.persona[k][g]; if (isFinite(n) && n >= 0 && n <= 100) o[g] = Math.round(n); }); st.persona[k] = o; }
+        });
+        if (isPlain(s.card)) st.card = { wins: small(s.card.wins, 999999), losses: small(s.card.losses, 999999) };
+        return st;
     }
-    let dex = loadDex();
-    function saveDex() { try { localStorage.setItem(DEX_KEY, JSON.stringify(dex)); } catch (e) {} }
+    function loadState() {
+        try { const st = sanitizeState(JSON.parse(localStorage.getItem(STATE_KEY) || "null")); if (st) return st; } catch (e) {}
+        const st = newState();   // 初回：古い図鑑の記録があれば取り込む
+        try { const d = JSON.parse(localStorage.getItem(DEX_KEY) || "null"); if (d && d.v === 1) { const m = sanitizeState({ v: 2, dex: d }); if (m) return m; } } catch (e) {}
+        return st;
+    }
+    let state = loadState(), dex = state.dex;
+    function saveState() { try { localStorage.setItem(STATE_KEY, JSON.stringify(state)); } catch (e) {} }
+    function saveDex() { state.dex = dex; saveState(); }
+    // 引き継ぎコード（機種変更用）。TB2- ＋ 保存データのJSONをbase64にしたもの
+    function makeCode() { return "TB2-" + btoa(unescape(encodeURIComponent(JSON.stringify(state)))); }
+    function readCode(code) {
+        code = String(code || "").trim();
+        if (!/^TB2-[A-Za-z0-9+/=]+$/.test(code) || code.length > 1500000) return null;
+        try { return sanitizeState(JSON.parse(decodeURIComponent(escape(atob(code.slice(4)))))); } catch (e) { return null; }
+    }
+    async function exportCode() {
+        const code = makeCode();
+        try { await navigator.clipboard.writeText(code); alert("引き継ぎコードをコピーしました。新しい端末の「コードを読み込む」に貼り付けてください。"); }
+        catch (e) { prompt("このコードをコピーして、新しい端末で読み込んでください", code); }
+    }
+    function importCode() {
+        const code = prompt("引き継ぎコードを貼り付けてください（今の記録は置き換わります）");
+        if (code === null) return;
+        const st = readCode(code);
+        if (!st) { alert("コードを読み込めませんでした。コピーし直してください。"); return; }
+        state = st; dex = state.dex; saveState(); showDex();
+    }
     const cnt = o => Object.keys(o).length;
     // [称号名, 条件の説明, 判定]
     const TITLE_DEFS = [
@@ -1427,8 +1509,8 @@
         showScreen('screen-dex');
     }
     function resetDex() {
-        if (!confirm('図鑑と称号の記録をすべて消します。よろしいですか？')) return;
-        dex = newDex(); saveDex(); showDex();
+        if (!confirm('図鑑・称号などの記録をすべて消します。よろしいですか？')) return;
+        state = newState(); dex = state.dex; saveState(); showDex();
     }
 
     // ---------- 招待リンク（?a=タイプ。タイプ記号だけをURLに入れる） ----------
