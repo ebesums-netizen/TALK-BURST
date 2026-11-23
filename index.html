@@ -1397,6 +1397,11 @@
         PERSONA_DIFF_PT: 40,     // ペルソナ：視点間の差がこのpt以上の軸を「ズレ候補」にする
         PERSONA_PER_AXIS: 3,     // ペルソナ：1視点・1軸の場面数
         GARDEN_KEEP_DAYS: 400,   // 庭の記録を残す日数
+        GARDEN_STAGES: [1, 3, 8, 15, 30, 60, 120],   // 成長：その軸に答えた累計がこの回数になると、芽・若葉・つぼみ・開花・満開・実り・伝説になる（種＝0回）
+        GARDEN_GRACE_DAYS: 7,        // 休んでも、この日数までは何も変わらない
+        GARDEN_DECAY_PER_DAY: 0.25,  // それを超えた休み1日ごとに、各軸の累計がこれだけ戻る（休んだ2日につき、成長1日分＝0.5回が戻る）
+        GARDEN_RECOVER: 1,           // 戻ったあと遊ぶと、1回答えるごとに、通常の+1に加えて、この数だけ取り戻す（＝2倍の速さ）
+        GARDEN_SCENERY_DAYS: [7, 30, 100],   // 庭の景色が増える、記録した日数
         BOND_LEVELS: [0, 3, 8, 15, 25]   // 絆レベル1〜5に必要なポイント
     };
     const STATE_KEY = "tb_state_v2", DEX_KEY = "tb_dex_v1", ALL_TYPES = Object.keys(DEFAULT_CHARACTERS);
@@ -1415,7 +1420,7 @@
     function mirrorMove(a, b) { return MIRROR_MOVES.find(m => (m[0] === a && m[1] === b) || (m[0] === b && m[1] === a)) || null; }
     const newDex = () => ({ v: 1, types: {}, mine: {}, jobs: {}, pairs: {}, sits: {}, edge: 0, mirror: 0, titles: [] });
     // 端末の保存は tb_state_v2 に一本化（図鑑・庭・絆・ペルソナ・カード）。古い tb_dex_v1 は読むだけで消さない（戻せるように）
-    const newState = () => ({ v: 2, dex: newDex(), garden: { days: {} }, bond: {}, persona: {}, card: { wins: 0, losses: 0 } });
+    const newState = () => ({ v: 2, dex: newDex(), garden: { days: {}, grow: {}, debt: {}, last: "" }, bond: {}, persona: {}, card: { wins: 0, losses: 0 } });
     const isPlain = o => !!o && typeof o === "object" && !Array.isArray(o);
     const BAD_KEYS = ["__proto__", "constructor", "prototype"];
     const okPair = k => /^[A-Z]{4}\|[A-Z]{4}$/.test(k) && k.split("|").every(x => ALL_TYPES.includes(x));
@@ -1436,6 +1441,12 @@
             const day = {}; AXIS_GROUPS.forEach(g => { if (v[g] === 1 || v[g] === -1) day[g] = v[g]; });
             st.garden.days[k] = day;
         });
+        if (isPlain(s.garden)) {   // 成長の記録（累計・戻った分・最後に遊んだ日）
+            each(s.garden.grow, (k, v) => { if (AXIS_GROUPS.includes(k) && isPlain(v)) { const n = small(v.n, 99999), sv = Math.round(+v.s); st.garden.grow[k] = { n, s: isFinite(sv) ? Math.max(-n, Math.min(n, sv)) : 0 }; } });
+            each(s.garden.debt, (k, v) => { const d = +v; if (AXIS_GROUPS.includes(k) && isFinite(d) && d > 0) st.garden.debt[k] = Math.min(99999, Math.round(d * 100) / 100); });
+            if (typeof s.garden.last === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s.garden.last)) st.garden.last = s.garden.last;
+        }
+        ensureGrow(st);
         each(s.bond, (k, v) => { if (okPair(k) && isPlain(v)) st.bond[k] = { xp: small(v.xp, 999), done: Array.isArray(v.done) ? v.done.filter(x => typeof x === "string" && x.length <= 10).slice(0, 200) : [] }; });
         if (isPlain(s.persona)) ["ideal", "others", "real"].forEach(k => {
             if (isPlain(s.persona[k])) { const o = {}; AXIS_GROUPS.forEach(g => { const n = +s.persona[k][g]; if (isFinite(n) && n >= 0 && n <= 100) o[g] = Math.round(n); }); st.persona[k] = o; }
@@ -1443,9 +1454,18 @@
         if (isPlain(s.card)) st.card = { wins: small(s.card.wins, 999999), losses: small(s.card.losses, 999999) };
         return st;
     }
+    function ensureGrow(st) {   // 成長の記録がない古い保存は、毎日の記録から作る
+        const days = Object.keys(st.garden.days).sort();
+        AXIS_GROUPS.forEach(g => {
+            if (st.garden.grow[g]) return;
+            let n = 0, sum = 0; days.forEach(k => { const v = st.garden.days[k][g]; if (v === 1 || v === -1) { n++; sum += v; } });
+            st.garden.grow[g] = { n, s: sum };
+        });
+        if (!st.garden.last && days.length) st.garden.last = days[days.length - 1];
+    }
     function loadState() {
         try { const st = sanitizeState(JSON.parse(localStorage.getItem(STATE_KEY) || "null")); if (st) return st; } catch (e) {}
-        const st = newState();   // 初回：古い図鑑の記録があれば取り込む
+        const st = newState(); ensureGrow(st);   // 初回：古い図鑑の記録があれば取り込む
         try { const d = JSON.parse(localStorage.getItem(DEX_KEY) || "null"); if (d && d.v === 1) { const m = sanitizeState({ v: 2, dex: d }); if (m) return m; } } catch (e) {}
         return st;
     }
@@ -1709,6 +1729,147 @@
         if (dungeonIdx < dungeonList.length) renderScene(); else calculateTypeResult();
     }
 
+    // ---------- 庭の絵（24×24のピクセルアート。自動で輪郭・ハイライト・顔を付ける）----------
+    const GardenArt = (() => {
+        // 庭の植物 v2：24×24。自動で「ハイライト＋影＋輪郭線」を付け、顔（目・ほっぺ・口）をのせる
+        const G = 24, OUT = "#3d2f4f";
+        const mk = () => Array.from({ length: G }, () => Array(G).fill(null));
+        const P = (g, x, y, c) => { x = Math.round(x); y = Math.round(y); if (x >= 0 && x < G && y >= 0 && y < G && c) g[y][x] = c; };
+        const R = (g, x, y, w, h, c) => { for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) P(g, x + i, y + j, c); };
+        const D = (g, cx, cy, r, c) => { for (let y = Math.floor(cy - r); y <= Math.ceil(cy + r); y++) for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) if (Math.hypot(x - cx, y - cy) <= r) P(g, x, y, c); };
+        const E = (g, cx, cy, a, b, c) => { for (let y = Math.floor(cy - b); y <= Math.ceil(cy + b); y++) for (let x = Math.floor(cx - a); x <= Math.ceil(cx + a); x++) if (((x - cx) / a) ** 2 + ((y - cy) / b) ** 2 <= 1) P(g, x, y, c); };
+        const hex = c => [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16));
+        const mix = (c, t, k) => { const a = hex(c), b = hex(t); return "#" + a.map((v, i) => Math.round(v + (b[i] - v) * k).toString(16).padStart(2, "0")).join(""); };
+        function finish(g) {   // ハイライト・影・輪郭
+            const o = mk(), f = (x, y) => (x >= 0 && x < G && y >= 0 && y < G) ? g[y][x] : null;
+            for (let y = 0; y < G; y++) for (let x = 0; x < G; x++) {
+                const c = g[y][x]; if (!c) continue;
+                let v = c; if (!f(x, y - 1) || !f(x - 1, y)) v = mix(c, "#ffffff", 0.3); else if (!f(x, y + 1) || !f(x + 1, y)) v = mix(c, "#000000", 0.2);
+                o[y][x] = v;
+            }
+            for (let y = 0; y < G; y++) for (let x = 0; x < G; x++) if (!g[y][x] && (f(x - 1, y) || f(x + 1, y) || f(x, y - 1) || f(x, y + 1))) o[y][x] = OUT;
+            return o;
+        }
+        function face(o, cx, cy, big) {   // 目（縦2px）・ほっぺ・口
+            const e = "#2b1d33";
+            P(o, cx - 2, cy, e); P(o, cx - 2, cy + 1, e); P(o, cx + 2, cy, e); P(o, cx + 2, cy + 1, e);
+            P(o, cx - 2, cy, "#2b1d33"); P(o, cx - 3, cy + 2, "#ff9fb2"); P(o, cx + 3, cy + 2, "#ff9fb2");
+            P(o, cx - 1, cy + 3, e); P(o, cx, cy + 3, e); P(o, cx + 1, cy + 3, e); if (big) { P(o, cx - 1, cy + 2, "#7a3a4a"); P(o, cx, cy + 2, "#7a3a4a"); P(o, cx + 1, cy + 2, "#7a3a4a"); }
+        }
+        function eyesClosed(o, cx, cy) { const e = "#2b1d33"; P(o, cx - 2, cy, e); P(o, cx - 1, cy + 1, e); P(o, cx + 2, cy, e); P(o, cx + 1, cy + 1, e); P(o, cx - 3, cy + 2, "#ff9fb2"); P(o, cx + 3, cy + 2, "#ff9fb2"); }
+        const spark = (o, pts) => pts.forEach(([x, y, c]) => { P(o, x, y, c || "#fff3a0"); P(o, x - 1, y, mix(c || "#fff3a0", "#ffffff", .0) + ""); });
+        function sparkles(o, pts) { pts.forEach(([x, y]) => { P(o, x, y, "#fff6a8"); P(o, x - 1, y, "#ffe27a"); P(o, x + 1, y, "#ffe27a"); P(o, x, y - 1, "#ffe27a"); P(o, x, y + 1, "#ffe27a"); }); }
+        const BASE = 20;   // 植物の根元の行
+        const G1 = "#4fb05a", G2 = "#3f9a4c", LEAF = "#6cc76a";
+        function stem(g, x, h, c) { for (let y = 0; y < h; y++) P(g, x, BASE - y, c || G1); }
+        function leafPair(g, x, y, s, c) { E(g, x - 2 - s * 0.6, y, s * 0.7 + 1.4, 0.95, c || LEAF); E(g, x + 2 + s * 0.6, y - 1, s * 0.7 + 1.4, 0.95, c || LEAF); }
+
+        function seed(g, post) { E(g, 12, 20, 3, 2, "#9a6b3f"); P(g, 12, 18, "#9a6b3f"); post.push(o => { eyesClosed(o, 12, 19); }); }
+        // ---------- 花（ひまわり・月光草・チューリップ・たんぽぽ）----------
+        function flower(g, st, post, K) {
+            if (st === 0) { seed(g, post); return; }
+            const H = [0, 4, 6, 8, 9, 9, 10, 9][st], top = BASE - H;
+            stem(g, 12, H); if (st >= 3) stem(g, 13, H - 2, G2);
+            if (st === 1) { leafPair(g, 12, 17, 1); return; }
+            leafPair(g, 12, BASE - 2, st >= 4 ? 3 : 2); if (st >= 3) leafPair(g, 12, BASE - 5, 2); if (st >= 5) leafPair(g, 12, BASE - 8, 1);
+            const r = [0, 0, 0, 0, 3, 4, 4, 5][st];
+            if (st === 2) { D(g, 12, top - 1, 2.3, K.bud); post.push(o => face(o, 12, top - 2, false)); return; }
+            if (st === 3) { E(g, 12, top - 2, 3, 4, K.bud); P(g, 12, top - 6, K.bud); post.push(o => face(o, 12, top - 3, false)); return; }
+            const cy = top - r + 1;
+            K.head(g, 12, cy, r, st, post);
+            if (st >= 6) { K.head(g, 4, 12, 2, 4, post); K.head(g, 20, 11, 2, 4, post); stem(g, 4, 8); stem(g, 20, 9); }
+            if (st === 6) post.push(o => sparkles(o, [[3, 3], [21, 4]]));
+            if (st === 7) post.push(o => sparkles(o, [[3, 2], [21, 3], [12, 0], [1, 9], [23, 10], [6, 6], [18, 7]]));
+        }
+        const heads = {
+            sunflower(g, cx, cy, r, st, post) { const petals = r <= 2 ? 8 : 12; for (let k = 0; k < petals; k++) { const a = k / petals * Math.PI * 2; D(g, cx + Math.cos(a) * (r + 1), cy + Math.sin(a) * (r + 1), r <= 2 ? 1 : 1.6, "#ffd23c"); } D(g, cx, cy, r, "#a8702a"); post.push(o => { if (r >= 3) face(o, cx, cy - 1, true); else { P(o, cx - 1, cy, "#2b1d33"); P(o, cx + 1, cy, "#2b1d33"); } }); },
+            tulip(g, cx, cy, r, st, post) { E(g, cx, cy + 1, r * 0.95, r * 1.05, "#ee5a6a"); if (r >= 4) { [-0.65, 0, 0.65].forEach(k => P(g, cx + k * r, cy - r - 1, "#ee5a6a")); } else { P(g, cx - 1, cy - r - 1, "#ee5a6a"); P(g, cx + 1, cy - r - 1, "#ee5a6a"); } post.push(o => { if (r >= 3) face(o, cx, cy, false); else { P(o, cx - 1, cy + 1, "#2b1d33"); P(o, cx + 1, cy + 1, "#2b1d33"); } }); },
+            moon(g, cx, cy, r, st, post) { for (let k = 0; k < 5; k++) { const a = -Math.PI / 2 + k / 5 * Math.PI * 2; D(g, cx + Math.cos(a) * r * 0.85, cy + Math.sin(a) * r * 0.85, Math.max(1.4, r * 0.55), "#b3a6ff"); } D(g, cx, cy, Math.max(1.5, r * 0.62), "#e3deff"); post.push(o => { if (r >= 3) face(o, cx, cy - 1, false); else { P(o, cx - 1, cy, "#2b1d33"); P(o, cx + 1, cy, "#2b1d33"); } if (r >= 5) sparkles(o, [[cx - r - 2, cy - r], [cx + r + 2, cy - r + 1]]); }); },
+            dandelion(g, cx, cy, r, st, post) { if (st >= 6) { D(g, cx, cy, r + 1, "#f7f7fc"); for (let k = 0; k < 14; k++) { const a = k / 14 * Math.PI * 2; P(g, cx + Math.cos(a) * (r + 2), cy + Math.sin(a) * (r + 2), "#f7f7fc"); } post.push(o => { face(o, cx, cy - 1, false); P(o, cx + r + 3, cy - r - 1, "#e9f0ff"); P(o, cx - r - 3, cy - r + 2, "#e9f0ff"); }); } else { D(g, cx, cy, r, "#ffd84a"); for (let k = 0; k < 10; k++) { const a = k / 10 * Math.PI * 2; P(g, cx + Math.cos(a) * (r + 1), cy + Math.sin(a) * (r + 1), "#ffd84a"); } post.push(o => { if (r >= 3) face(o, cx, cy - 1, false); else { P(o, cx - 1, cy, "#2b1d33"); P(o, cx + 1, cy, "#2b1d33"); } }); } }
+        };
+        // ---------- 木（樫・桜）----------
+        function cloud(g, cx, cy, w, h, c) { D(g, cx - w * 0.28, cy + h * 0.15, h * 0.5, c); D(g, cx + w * 0.28, cy + h * 0.15, h * 0.5, c); D(g, cx, cy - h * 0.12, h * 0.55, c); E(g, cx, cy + h * 0.2, w / 2, h * 0.38, c); }
+        function tree(g, st, post, K) {
+            if (st === 0) { seed(g, post); return; }
+            if (st === 1) { stem(g, 12, 4); leafPair(g, 12, 16, 1, K.leaf); return; }
+            const trunkH = [0, 0, 6, 7, 8, 9, 9, 10][st], tw = st >= 7 ? 3 : st >= 5 ? 2 : 1, x0 = 12 - Math.floor(tw / 2);
+            R(g, x0, BASE - trunkH + 1, tw, trunkH, "#8a5a3a"); if (st >= 5) { P(g, x0 - 1, BASE, "#8a5a3a"); P(g, x0 + tw, BASE, "#8a5a3a"); }
+            if (st === 2) { D(g, 12, BASE - trunkH - 1, 3, K.leaf); post.push(o => { P(o, 11, BASE - trunkH - 2, "#2b1d33"); P(o, 13, BASE - trunkH - 2, "#2b1d33"); }); return; }
+            const cfg = { 3: [10, 8, 10], 4: [14, 9, 9], 5: [18, 11, 8], 6: [18, 11, 8], 7: [22, 13, 7] }[st];
+            cloud(g, 12, cfg[2], cfg[0], cfg[1], K.leaf);
+            if (st >= 4) { D(g, 12 - cfg[0] * 0.3, cfg[2] - 2, 1, K.leaf2); D(g, 12 + cfg[0] * 0.25, cfg[2] + 1, 1.3, K.leaf2); }
+            post.push(o => face(o, 12, cfg[2] - 1, st >= 5));
+            if (st >= 6) post.push(o => K.fruits(o, cfg, st));
+            if (st === 7) post.push(o => { sparkles(o, [[2, 2], [21, 1], [23, 8], [0, 9], [12, 0]]); P(o, 12, 1, "#ffd23c"); P(o, 11, 2, "#ffd23c"); P(o, 13, 2, "#ffd23c"); });
+        }
+        const trees = {
+            oak: { leaf: "#58b04a", leaf2: "#3f8f3a", fruits(o, cfg, st) { [[6, 8], [11, 5], [17, 9], [9, 12], [15, 6]].slice(0, st === 7 ? 5 : 3).forEach(([x, y]) => { P(o, x, y, "#c98a3c"); P(o, x, y - 1, "#7a4f2a"); }); } },
+            cherry: { leaf: "#ffb3cc", leaf2: "#f08cb0", fruits(o, cfg, st) { [[5, 7], [10, 4], [18, 8], [8, 12], [15, 5], [20, 11]].slice(0, st === 7 ? 6 : 4).forEach(([x, y]) => { P(o, x, y, "#fff4f8"); }); [[4, 19], [19, 18], [9, 20]].slice(0, st === 7 ? 3 : 1).forEach(([x, y]) => P(o, x, y, "#ffd6e5")); } }
+        };
+        // ---------- サボテン ----------
+        function cactus(g, st, post) {
+            if (st === 0) { seed(g, post); return; }
+            const w = st === 1 ? 4 : st === 2 ? 6 : 8, h = [0, 4, 7, 10, 12, 13, 14, 16][st], x0 = 12 - w / 2, y0 = BASE - h + 1;
+            E(g, 12, y0 + h / 2, w / 2, h / 2, "#4fbf7a"); R(g, x0 + 1, y0 + Math.floor(h / 2), w - 2, Math.ceil(h / 2), "#4fbf7a");
+            for (let y = y0 + 2; y < BASE; y += 3) { P(g, 12, y, "#7fe0a0"); }
+            const arm = (side, y, len) => { const xx = side < 0 ? x0 - 3 : x0 + w + 1; R(g, xx, y, 3, 3, "#4fbf7a"); E(g, xx + 1, y - len / 2, 1.6, len / 2 + 1, "#4fbf7a"); };
+            if (st >= 4) arm(-1, y0 + Math.floor(h * 0.55), 5);
+            if (st >= 5) arm(1, y0 + Math.floor(h * 0.45), 5);
+            if (st >= 2) post.push(o => face(o, 12, y0 + Math.floor(h * 0.4), false));
+            if (st === 1) post.push(o => { P(o, 11, 18, "#2b1d33"); P(o, 13, 18, "#2b1d33"); });
+            if (st >= 6) post.push(o => { P(o, 12, y0 - 1, "#ff6fa5"); P(o, 11, y0 - 1, "#ffb3d0"); P(o, 13, y0 - 1, "#ffb3d0"); P(o, 12, y0 - 2, "#ffb3d0"); P(o, 12, y0, "#ffe27a"); });
+            if (st === 7) post.push(o => { P(o, x0 - 2, y0 + Math.floor(h * 0.55) - 5, "#ff6fa5"); P(o, x0 - 3, y0 + Math.floor(h * 0.55) - 5, "#ffb3d0"); P(o, x0 + w + 2, y0 + Math.floor(h * 0.45) - 5, "#ff6fa5"); P(o, x0 + w + 3, y0 + Math.floor(h * 0.45) - 5, "#ffb3d0"); sparkles(o, [[3, 3], [21, 2], [12, 0], [1, 10], [23, 11]]); });
+        }
+        // ---------- 竹 ----------
+        function bamboo(g, st, post) {
+            if (st === 0) { seed(g, post); return; }
+            const shoot = (cx, h, w) => { for (let y = 0; y < h; y++) { const ww = Math.max(2, Math.round(w * (1 - y / (h + 1)))); R(g, cx - Math.floor(ww / 2), BASE - y, ww, 1, y % 3 === 2 ? "#a8c466" : "#c4dd7e"); } };
+            if (st <= 3) { shoot(12, [0, 5, 8, 11][st], st === 1 ? 5 : 7); post.push(o => face(o, 12, BASE - [0, 3, 4, 6][st], false)); if (st === 3) { P(g, 12, 6, "#6bbf59"); } return; }
+            const stalk = (x, h) => { for (let y = 0; y < h; y++) { R(g, x - 1, BASE - y, 3, 1, y % 4 === 3 ? "#3f8a3a" : "#6bc25a"); } const ty = BASE - h; [[-2, 1], [-3, 0], [-4, 0], [-4, -1]].forEach(([dx, dy]) => P(g, x + dx, ty + dy, "#7fd06a")); [[2, 2], [3, 1], [4, 1], [5, 0]].forEach(([dx, dy]) => P(g, x + dx, ty + dy, "#6fc65e")); [[0, -1], [0, -2], [1, -3]].forEach(([dx, dy]) => P(g, x + dx, ty + dy, "#8fd47a")); if (h > 11) { [[-2, 6], [-3, 5], [-3, 4]].forEach(([dx, dy]) => P(g, x + dx, ty + dy, "#7fd06a")); } };
+            const H = [0, 0, 0, 0, 11, 13, 14, 16][st];
+            stalk(12, H); if (st >= 5) { stalk(5, H - 4); }
+            if (st >= 6) stalk(19, H - 6);
+            if (st >= 7) post.push(o => { sparkles(o, [[2, 2], [21, 1], [12, 0], [1, 10], [23, 9]]); });
+        }
+        const SPECIES = {
+            sunflower: { name: "ひまわり", fn: (g, s, p) => flower(g, s, p, { bud: "#e3b72a", head: heads.sunflower }) },
+            moon: { name: "月光草", fn: (g, s, p) => flower(g, s, p, { bud: "#9a8de6", head: heads.moon }) },
+            tulip: { name: "チューリップ", fn: (g, s, p) => flower(g, s, p, { bud: "#e0505e", head: heads.tulip }) },
+            dandelion: { name: "たんぽぽ", fn: (g, s, p) => flower(g, s, p, { bud: "#e9c43a", head: heads.dandelion }) },
+            oak: { name: "樫", fn: (g, s, p) => tree(g, s, p, trees.oak) },
+            cherry: { name: "桜", fn: (g, s, p) => tree(g, s, p, trees.cherry) },
+            cactus: { name: "サボテン", fn: cactus },
+            bamboo: { name: "竹", fn: bamboo }
+        };
+        function plantGrid(sp, st) {
+            const g = mk(), post = []; SPECIES[sp].fn(g, st, post);
+            let o = finish(g); post.forEach(f => f(o));
+            // 地面（輪郭の後ろ）
+            for (let y = 21; y < G; y++) for (let x = 0; x < G; x++) o[y][x] = (y === 21) ? "#7a5636" : ((x + y) % 5 === 0 ? "#9a6e45" : "#7a5636");
+            for (let x = 0; x < G; x += 3) { if (!o[20][x]) o[20][x] = "#5fbf5a"; if (!o[19][x] && x % 6 === 0) o[19][x] = "#7fd17a"; }
+            for (let x = 0; x < G; x++) if (o[20][x] === OUT && st === 0) {}
+            return o;
+        }
+        function gridSvg(g, px, bg) {
+            let r = ""; for (let y = 0; y < g.length; y++) for (let x = 0; x < g[0].length; x++) { const c = g[y][x]; if (c) r += `<rect x="${x * px}" y="${y * px}" width="${px}" height="${px}" fill="${c}"/>`; }
+            return `<svg xmlns="http://www.w3.org/2000/svg" width="${g[0].length * px}" height="${g.length * px}" shape-rendering="crispEdges" style="background:${bg || "transparent"}">${r}</svg>`;
+        }
+
+        const AXIS_SPECIES = { EI: ["sunflower", "moon"], SN: ["oak", "cherry"], TF: ["cactus", "tulip"], JP: ["bamboo", "dandelion"] };
+        function scenery(o, level) {   // 庭の景色：続けた日数で増える（空の null のところにだけ描く）
+            const set = (x, y, c) => { if (y >= 0 && y < G && x >= 0 && x < G && !o[y][x]) o[y][x] = c; };
+            if (level >= 1) { [[1, 19, "#ff9ecb"], [6, 20, "#ffe27a"], [17, 19, "#ffffff"], [22, 20, "#ff9ecb"]].forEach(([x, y, c]) => set(x, y, c)); }
+            if (level >= 2) { [[3, 9], [20, 7]].forEach(([x, y]) => { set(x, y, "#ff9ecb"); set(x + 1, y, "#ff9ecb"); set(x, y - 1, "#b48cf0"); set(x + 1, y + 1, "#b48cf0"); }); }
+            if (level >= 3) { [[1, 2], [21, 3], [9, 1], [15, 4]].forEach(([x, y]) => { set(x, y, "#fff3a0"); set(x - 1, y, "#ffe27a"); set(x + 1, y, "#ffe27a"); set(x, y - 1, "#ffe27a"); set(x, y + 1, "#ffe27a"); }); }
+        }
+        function svg(g) {
+            let r = ""; for (let y = 0; y < g.length; y++) for (let x = 0; x < g[0].length; x++) { const c = g[y][x]; if (c) r += `<rect x="${x}" y="${y}" width="1.02" height="1.02" fill="${c}"/>`; }
+            return `<svg viewBox="0 0 24 24" style="width:100%;height:auto;display:block" shape-rendering="crispEdges" aria-hidden="true">${r}</svg>`;
+        }
+
+        return { SPECIES, AXIS_SPECIES, plantGrid, scenery, svg };
+    })();
+
     // ---------- 今日の庭（毎日2場面。日付は日本時間。記録は端末内） ----------
     const DEFAULT_DAILY = [   // 毎日の庭用の内蔵場面（形式は DEFAULT_SCENES と同じ）
         ["D001", "EI", "E", "今日は、依頼のない休日。", "誰かを誘って出かける", "一人で好きなことをして過ごす", "☀️"],
@@ -1767,6 +1928,24 @@
         });
         return out;
     }
+    const STAGE_NAMES = ["種", "芽", "若葉", "つぼみ", "開花", "満開", "実り", "伝説"];
+    function growOf(g) { return state.garden.grow[g] || { n: 0, s: 0 }; }
+    function pendingLoss(today) {   // 最後に遊んだ日から、猶予を超えた分（まだ保存していない見かけの戻り）
+        const last = state.garden.last; if (!last) return 0;
+        const gap = dayNumberOf(today) - dayNumberOf(last);
+        return gap > TB_CONFIG.GARDEN_GRACE_DAYS ? (gap - TB_CONFIG.GARDEN_GRACE_DAYS) * TB_CONFIG.GARDEN_DECAY_PER_DAY : 0;
+    }
+    function floorOf(g) { return Math.min(growOf(g).n, TB_CONFIG.GARDEN_STAGES[1]); }   // 一度若葉まで育てたら、それより戻らない
+    function effOf(g, today) { return Math.max(floorOf(g), growOf(g).n - (state.garden.debt[g] || 0) - pendingLoss(today)); }
+    function stageOf(eff) { let st = 0; TB_CONFIG.GARDEN_STAGES.forEach((th, i) => { if (eff >= th) st = i + 1; }); return st; }
+    function speciesOf(g) { return GardenArt.AXIS_SPECIES[g][growOf(g).s >= 0 ? 0 : 1]; }   // 種類は、これまでの累計の傾きで決まる
+    function applyAbsence(today) {   // 遊んだとき、休んでいた分の戻りを確定する
+        const loss = pendingLoss(today); if (loss <= 0) return;
+        AXIS_GROUPS.forEach(g => {
+            const room = Math.max(0, growOf(g).n - (state.garden.debt[g] || 0) - floorOf(g));
+            const add = Math.min(loss, room); if (add > 0) state.garden.debt[g] = Math.round(((state.garden.debt[g] || 0) + add) * 100) / 100;
+        });
+    }
     function openGarden() {
         const today = todayJst(), done = state.garden.days[today] || {};
         const todo = dayScenes(today).filter(s => s && !(s.axis in done));
@@ -1780,7 +1959,11 @@
         SFX.tap(chosenPos ? 2 : -2);
         const d = (s.pos === s.axis[0]) === chosenPos ? 1 : -1;   // 軸の1文字目の側に傾いたら +1
         if (!state.garden.days[today]) state.garden.days[today] = {};
+        applyAbsence(today);   // 休んでいた分の戻りを確定してから、今日の分を足す
         state.garden.days[today][s.axis] = d;
+        const gr = growOf(s.axis); state.garden.grow[s.axis] = { n: gr.n + 1, s: gr.s + d };
+        if ((state.garden.debt[s.axis] || 0) > 0) state.garden.debt[s.axis] = Math.max(0, Math.round((state.garden.debt[s.axis] - TB_CONFIG.GARDEN_RECOVER) * 100) / 100);
+        state.garden.last = today;
         const keys = Object.keys(state.garden.days).sort();   // 古い記録を残しすぎない
         while (keys.length > TB_CONFIG.GARDEN_KEEP_DAYS) delete state.garden.days[keys.shift()];
         saveState();
@@ -1788,22 +1971,28 @@
         dungeonIdx++;
         if (dungeonIdx < dungeonList.length) renderScene(); else showGarden();
     }
-    const PLANTS = { EI: ["🌻", "🍄"], SN: ["🌳", "🌸"], TF: ["🌵", "🌷"], JP: ["🎋", "🌼"] };
     function showGarden() {
         const today = todayJst(), sum = gardenSummary(gardenDays(), today), done = state.garden.days[today] || {};
         const remain = dayScenes(today).filter(s => s && !(s.axis in done)).length;
         document.getElementById('garden-date').textContent = today.slice(5).replace("-", "/");
         document.getElementById('garden-status').textContent = `記録した日数 ${gardenDayCount()}日　／　` + (remain ? `今日はあと${remain}場面` : "今日の分はおしまい。また明日");
+        const resting = pendingLoss(today) > 0, healing = AXIS_GROUPS.some(g => (state.garden.debt[g] || 0) > 0);
+        if (resting) document.getElementById('garden-status').textContent += "　🍃 お庭は少しお休み中。また遊びに来てくれたら、すぐ元気になるよ";
+        else if (healing) document.getElementById('garden-status').textContent += "　🌱 元の姿を取り戻し中（遊ぶと2倍の速さで育つよ）";
         document.getElementById('garden-go').style.display = remain ? '' : 'none';
+        const dc = gardenDayCount(), level = TB_CONFIG.GARDEN_SCENERY_DAYS.filter(d => dc >= d).length;
         const grid = document.getElementById('garden-plants'); grid.innerHTML = '';
         const bars = document.getElementById('garden-bars'); bars.innerHTML = '';
         AXIS_GROUPS.forEach(g => {
             const x = sum[g], enough = x.rn >= 3;
-            const tile = document.createElement('div'); tile.className = 'result-box'; tile.style.cssText = 'margin:0; padding:8px; text-align:center;';
-            const em = document.createElement('div'); em.style.fontSize = '2rem'; em.textContent = !enough ? "🌰" : x.rb >= 60 ? PLANTS[g][0] : x.rb <= 40 ? PLANTS[g][1] : "🌱";
-            const cap = document.createElement('div'); cap.className = 'sub'; cap.style.fontSize = '0.8rem';
-            cap.textContent = !enough ? `${AXIS_INFO[g][0]}・${AXIS_INFO[g][1]}（種）` : x.rb >= 50 ? `${AXIS_INFO[g][0]}寄り ${Math.round(x.rb)}%` : `${AXIS_INFO[g][1]}寄り ${Math.round(100 - x.rb)}%`;
-            tile.appendChild(em); tile.appendChild(cap); grid.appendChild(tile);
+            const eff = effOf(g, today), st = stageOf(eff), sp = speciesOf(g);
+            const cells = GardenArt.plantGrid(sp, st); GardenArt.scenery(cells, level);
+            const tile = document.createElement('div'); tile.className = 'result-box'; tile.style.cssText = 'margin:0; padding:6px; text-align:center;';
+            const pic = document.createElement('div'); pic.style.cssText = 'background:linear-gradient(#d6e6ff,#f3f8ff); border-radius:8px; overflow:hidden;'; pic.innerHTML = GardenArt.svg(cells);
+            const cap = document.createElement('div'); cap.style.cssText = 'font-weight:bold; margin-top:4px; font-size:0.9rem;'; cap.textContent = `${GardenArt.SPECIES[sp].name}（${STAGE_NAMES[st]}）`;
+            const sub = document.createElement('div'); sub.className = 'sub'; sub.style.fontSize = '0.75rem';
+            sub.textContent = st >= 7 ? "伝説の姿！" : `あと約${Math.max(1, Math.ceil((TB_CONFIG.GARDEN_STAGES[st] - eff) * 2))}日で「${STAGE_NAMES[st + 1]}」`;
+            tile.appendChild(pic); tile.appendChild(cap); tile.appendChild(sub); grid.appendChild(tile);
             const row = document.createElement('p'); row.style.cssText = 'margin:3px 0; font-size:0.85rem;';
             const w = enough ? Math.round(x.rb) : 50;
             row.innerHTML = `<span></span>`; row.firstChild.textContent = `${AXIS_INFO[g][0]} `;
