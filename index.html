@@ -216,7 +216,7 @@
         .sub { font-size: 0.75rem; color: var(--text-sub); }
         #my-title, #my-class-name { word-break: keep-all; overflow-wrap: anywhere; }   /* 称号・職種名は、スペースや「・」の位置で改行する */
         .disclaimer { font-size: 0.7rem; color: #7b7b92; line-height: 1.5; margin: 18px 4px 0; }
-        #screen-quiz.active ~ .disclaimer { display: none; }
+        #screen-quiz.active ~ .disclaimer, #screen-scene.active ~ .disclaimer { display: none; }
         /* 相性ランキング */
         #typeA, #typeB, #rank-type { font-size: clamp(12px, 3.7vw, 16px); }
         .rank-h { font-size: 0.9rem; font-weight: bold; margin: 16px 0 4px; color: #c8c8d8; }
@@ -278,7 +278,8 @@
             <button class="btn-secondary" onclick="inviteChoose()">👥 タイプを選んで測る</button>
         </div>
         <p style="text-align: center; color: var(--text-sub);">あなたのギルド職種を判定し、他の冒険者との「限界会話時間」をシニカルに分析します。</p>
-        <button onclick="startDiagnosis()">📜 職種診断を始める (全16問)</button>
+        <button id="btn-dungeon" onclick="startDungeon()" style="display:none">⚔ 冒険に出る（ダンジョン診断）</button>
+        <button id="btn-quick" onclick="startDiagnosis()">📜 職種診断を始める (全16問)</button>
         <button class="btn-secondary" onclick="showScreen('screen-compat')">👥 直接タイプを選んで相性判定</button>
         <button class="btn-secondary" onclick="showDex()">📖 冒険者図鑑・称号</button>
     </div>
@@ -313,6 +314,19 @@
             <button type="button" class="sc d2" onclick="answerQuestion(-2)" aria-label="そう思わない"></button>
         </div>
         <div class="scale-lab"><span>◀ そう思う</span><span>どちらとも</span><span>そう思わない ▶</span></div>
+    </div>
+
+    <!-- 画面2.2: ダンジョン診断の場面（2択） -->
+    <div id="screen-scene" class="screen">
+        <div id="sc-stage" class="stage"><div id="sc-area" class="area"></div><div id="sc-char"></div><div class="ground"></div></div>
+        <div id="sc-track" class="track"></div>
+        <div class="question-box">
+            <div id="sc-progress" class="q-progress">場面 1 / 20</div>
+            <div id="sc-emoji" style="font-size:2rem; text-align:center; line-height:1.3;">🗝️</div>
+            <div id="sc-text" class="q-text"></div>
+        </div>
+        <button id="sc-b0" type="button" onclick="answerScene(0)"></button>
+        <button id="sc-b1" type="button" onclick="answerScene(1)"></button>
     </div>
 
     <!-- 画面2.5: 孵化前のプロフィール（すべて任意） -->
@@ -550,6 +564,7 @@
     const AXIS_INFO = { EI: ["外向", "内向"], SN: ["現実", "直感"], TF: ["論理", "感情"], JP: ["計画", "柔軟"] };
 
     // ---------- 状態 ----------
+    let featureSheet = {};              // シート Config の機能フラグ（key → true/false）
     let scenes = [], missions = [];     // シートの Scenes / Missions（空なら内蔵データを使う。内蔵データは段階2・4で追加）
     let characters = JSON.parse(JSON.stringify(DEFAULT_CHARACTERS));
     let jobs = JSON.parse(JSON.stringify(JOBS)), baseAxis = Object.assign({}, BASE_AXIS);
@@ -711,7 +726,7 @@
         }
         // 画面 → 曲。孵化後の結果画面は、卵が割れて誕生音が鳴り終わるまで無音（resultOk が true になってから属性の曲）
         function trackFor(id) {
-            if (id === "screen-quiz" || id === "screen-profile") return "quiz";
+            if (id === "screen-quiz" || id === "screen-scene" || id === "screen-profile") return "quiz";
             if (id === "screen-opening") return openingOn ? "opening" : null;   // 最初のタッチで音が解禁されてから流す
             if (id === "screen-menu" || id === "screen-dex") return "menu";
             if (id === "screen-compat" || id === "screen-rank") return "compat";
@@ -834,7 +849,7 @@
         sideJobs = Object.assign({}, SIDE_JOBS); noSideJob = NO_SIDE_JOB; raceNames = Object.assign({}, RACE_NAMES); raceDefault = RACE_DEFAULT;
         for (const k in PROFILE_DEFAULT) PROFILE[k] = Object.assign({}, PROFILE_DEFAULT[k]);
         questions = DEFAULT_QUESTIONS.slice(); situations = DEFAULT_SITUATIONS.slice();
-        scenes = []; missions = [];
+        scenes = []; missions = []; featureSheet = {};
     }
 
     // シートの内容を検証してから採用（空欄・長すぎる・禁止語を含む行は読み飛ばし、内蔵データを維持）
@@ -855,6 +870,11 @@
             const cls = String(r.pair_class || "").trim(), id = cleanText(r.mission_id, 10), text = cleanText(r.text, 60), xp = Math.round(+r.xp || 1);
             if (/^[01]{4}$/.test(cls) && id && text) missions.push({ id, cls, text, xp: Math.max(1, Math.min(3, xp)) });
         });
+        if (Array.isArray(d.config)) d.config.forEach(r => {   // シート Config: key（機能名）／value（TRUE・FALSE）
+            const k = String(r.key || "").trim().toLowerCase();
+            if (/^[a-z]{2,12}$/.test(k)) featureSheet[k] = (r.value === true || /^(true|1|on|yes|はい)$/i.test(String(r.value).trim()));
+        });
+        renderFeatures();
     }
     function applyMasterData(d) {
         resetMaster();
@@ -957,7 +977,7 @@
 
     // ---------- 診断 ----------
     function startDiagnosis() {
-        SFX.unlock();
+        SFX.unlock(); lastDiagMode = "quick";
         currentQIndex = 0;
         hopNext = "";
         axisSum = {}; axisN = {}; axisLast = {}; myBalance = {};
@@ -1439,7 +1459,7 @@
         ["ブラック鑑定士", "20組の相性を測る", () => cnt(dex.pairs) >= 20],
         ["全シチュ制覇", "すべてのシチュエーションで相性を測る", () => situations.length > 0 && situations.every(s => dex.sits[s.id])],
         ["鏡の向こうの住人", "鏡像ペアの相性を測る", () => !!dex.mirror],
-        ["境界に立つ者", "軸が僅差（45〜55%）の診断結果が出る", () => !!dex.edge],
+        ["境界に立つ者", "軸が僅差の診断結果が出る（クイック診断は45〜55%／ダンジョン診断は3軸以上が3対2）", () => !!dex.edge],
         ["職種コレクター", "5種類の職種になる", () => cnt(dex.jobs) >= 5]
     ];
     const earnedTitles = () => TITLE_DEFS.filter(d => d[2]()).map(d => d[0]);
@@ -1448,9 +1468,18 @@
         dex.titles = now; saveDex();
         const el = document.getElementById(elId); if (el) el.textContent = fresh.length ? "🏅 新しい称号: " + fresh.join("、") : "";
     }
-    function edgeAxes() { return AXIS_GROUPS.filter(g => Math.abs((myBalance[g] != null ? myBalance[g] : 50) - 50) <= 5); }
+    function edgeAxes() {
+        const bal = g => (myBalance[g] != null ? myBalance[g] : 50);
+        if (lastDiagMode === "dungeon") {   // 2択5場面の傾きは 40/60/80…％。3対2(40・60％)の軸が EDGE_MIN_AXES 以上なら「揺らぎ」
+            const near = AXIS_GROUPS.filter(g => Math.abs(bal(g) - 50) <= 10);
+            return near.length >= TB_CONFIG.EDGE_MIN_AXES ? near : [];
+        }
+        return AXIS_GROUPS.filter(g => Math.abs(bal(g) - 50) <= 5);
+    }
     function edgeLabel() {
-        return edgeAxes().map(g => `「${AXIS_INFO[g][0]}と${AXIS_INFO[g][1]}の境界に立つ者」`).join("／");
+        const ea = edgeAxes();
+        if (ea.length === AXIS_GROUPS.length) return "「すべてを揺らす者」";
+        return ea.map(g => `「${AXIS_INFO[g][0]}と${AXIS_INFO[g][1]}の境界に立つ者」`).join("／");
     }
     function recordMyResult(t, job) {   // 孵化したとき
         dex.types[t] = 1; dex.mine[t] = (dex.mine[t] || 0) + 1; if (job) dex.jobs[job] = 1;
@@ -1513,6 +1542,102 @@
         state = newState(); dex = state.dex; saveState(); showDex();
     }
 
+    // ---------- 機能の入り切り（優先順: URLの ?on= ＞ シート Config ＞ 上の TB_CONFIG.FEATURES） ----------
+    const FEATURE_FORCE = (() => {   // ?on=dungeon,garden（既知の機能名だけを受け付ける）
+        const m = /[?&]on=([^&#]*)/.exec(location.search);
+        return m ? m[1].split(",").filter(x => Object.prototype.hasOwnProperty.call(TB_CONFIG.FEATURES, x)) : [];
+    })();
+    function featureOn(name) {
+        if (FEATURE_FORCE.indexOf(name) >= 0) return true;
+        if (Object.prototype.hasOwnProperty.call(featureSheet, name)) return featureSheet[name];
+        return Object.prototype.hasOwnProperty.call(TB_CONFIG.FEATURES, name) && !!TB_CONFIG.FEATURES[name];
+    }
+    function renderFeatures() {   // 設定が変わったときに、メニューの表示を合わせる
+        try {
+            const on = featureOn('dungeon');
+            document.getElementById('btn-dungeon').style.display = on ? '' : 'none';
+            document.getElementById('btn-quick').textContent = on ? '⚡ クイック診断（全16問）' : '📜 職種診断を始める (全16問)';
+            document.getElementById('btn-quick').className = on ? 'btn-secondary' : '';
+        } catch (e) { /* 画面の準備前は何もしない */ }
+    }
+
+    // ---------- ダンジョン診断（場面の2択。1軸5場面＝奇数なので同点が出ない） ----------
+    const DEFAULT_SCENES = [   // [id, 軸, ＋側の文字, 場面文, ＋側の選択肢, 逆側の選択肢, 絵文字]　シート Scenes が使えないときの内蔵データ
+        ["S001", "EI", "E", "宝箱の前に、仲間がいる。", "仲間を呼んで一緒に開ける", "一人で罠を調べてから開ける", "🗝️"],
+        ["S002", "EI", "E", "酒場で、見知らぬ冒険者が隣に座った。", "「何の依頼で来たの？」と話しかける", "静かに飲みながら様子を見る", "🍻"],
+        ["S003", "EI", "E", "野営の夜。焚き火を囲んで皆が盛り上がっている。", "輪に入って一番しゃべる", "少し離れて、星を見ながら聞く", "🏕️"],
+        ["S004", "EI", "E", "新しい依頼を受けた朝。", "酒場で仲間を募って出発する", "一人で道具を整えて出発する", "📜"],
+        ["S005", "EI", "E", "長旅の途中、休める日が一日できた。", "町へ出て、人に会いに行く", "宿にこもって、一人で回復する", "🛏️"],
+        ["S006", "EI", "E", "広場の芸人が「誰か手伝って！」と叫んだ。", "真っ先に手を挙げる", "後ろの列で見届ける", "🎪"],
+        ["S101", "SN", "S", "古い橋が見えた。渡れるか分からない。", "板の傷み具合を一枚ずつ確かめる", "渡れる気がする道を直感で選ぶ", "🌉"],
+        ["S102", "SN", "S", "地図にない分かれ道に出た。", "地図と足跡を見て、確実な道を行く", "何かある気がして、地図にない道へ", "🗺️"],
+        ["S103", "SN", "S", "見たことのない薬草を手に入れた。", "図鑑で成分を確かめてから使う", "「こう使えば効くのでは」と先に試す", "🌿"],
+        ["S104", "SN", "S", "遺跡の壁に、古い文字が刻まれている。", "文字の形を正確に書き写す", "意味を想像して物語を組み立てる", "🏛️"],
+        ["S105", "SN", "S", "依頼人の説明が、ざっくりしている。", "場所・日付・報酬を細かく聞き出す", "狙いを汲み取って先回りして動く", "📝"],
+        ["S106", "SN", "S", "鍛冶屋で新しい武器を選ぶ。", "重さと切れ味の数字で選ぶ", "持った瞬間の「しっくり」で選ぶ", "⚔️"],
+        ["S201", "TF", "T", "仲間が依頼に失敗して、落ち込んでいる。", "原因を整理して、次の対策を示す", "何も言わず、隣に座って話を聞く", "😢"],
+        ["S202", "TF", "T", "報酬の分け方で、仲間が揉めている。", "貢献度を数字にして、公平に割る", "全員が納得するまで話し合う", "💰"],
+        ["S203", "TF", "T", "実力不足の新人が、パーティに入ってきた。", "遠慮なく指摘して、早く育てる", "褒めながら、少しずつ慣らす", "🧙"],
+        ["S204", "TF", "T", "竜に捕まった村人を助ける。作戦が二つある。", "成功率が高いほうを選ぶ", "村人の不安が少ないほうを選ぶ", "🐉"],
+        ["S205", "TF", "T", "仲間が、小さな嘘をついていたと分かった。", "事実を並べて、理由を問いただす", "まず、なぜ言えなかったのかを聞く", "🕊️"],
+        ["S206", "TF", "T", "表彰式で、自分の功績が少なく紹介された。", "間違いを、冷静に訂正してもらう", "場の空気を考えて、黙っておく", "🏆"],
+        ["S301", "JP", "J", "出発前日の夜。", "持ち物をリストにして全部確認する", "必要なものは道中で何とかする", "🎒"],
+        ["S302", "JP", "J", "依頼の期限は、一週間後。", "初日に段取りを組んで少しずつ進める", "ギリギリまで寝かせて最後に一気にやる", "📅"],
+        ["S303", "JP", "J", "突然の嵐で、予定の道が通れなくなった。", "予備の計画に切り替える", "その場で面白そうな道を探す", "🌧️"],
+        ["S304", "JP", "J", "夕方、今夜の宿を決める。", "予約した宿に、時間どおり着く", "気になった宿に、その場で入る", "🏨"],
+        ["S305", "JP", "J", "パーティの作戦会議が始まった。", "役割と手順を決めてから動く", "状況を見て、臨機応変に動く", "🎲"],
+        ["S306", "JP", "J", "旅の最終日、半日だけ時間が余った。", "予定していた土産を買いに行く", "目に入った脇道へ、ふらっと入る", "🧳"],
+    ];
+    let dungeonList = [], dungeonIdx = 0, lastDiagMode = "quick";
+    function sceneSource() {   // シートの場面が各軸5つ以上あれば使い、足りなければ内蔵データ
+        const n = TB_CONFIG.SCENES_PER_AXIS;
+        const sheet = scenes.filter(s => s.tag !== "daily");
+        if (AXIS_GROUPS.every(g => sheet.filter(s => s.axis === g).length >= n)) return sheet;
+        return DEFAULT_SCENES.map(a => ({ id: a[0], axis: a[1], pos: a[2], text: a[3], cp: a[4], cn: a[5], emoji: a[6] }));
+    }
+    function shuffled(a) { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+    function buildDungeon() {   // 各軸から n 場面を選び、同じ軸が続かないように並べる
+        const n = TB_CONFIG.SCENES_PER_AXIS, src = sceneSource(), pools = {};
+        AXIS_GROUPS.forEach(g => { pools[g] = shuffled(src.filter(s => s.axis === g)).slice(0, n); });
+        const out = []; let prev = null;
+        for (let r = 0; r < n; r++) {
+            let order = shuffled(AXIS_GROUPS);
+            if (order[0] === prev) order.push(order.shift());
+            order.forEach(g => out.push(Object.assign({ posFirst: Math.random() < 0.5 }, pools[g][r])));
+            prev = order[order.length - 1];
+        }
+        return out;
+    }
+    function startDungeon() {
+        SFX.unlock(); lastDiagMode = "dungeon";
+        dungeonList = buildDungeon(); dungeonIdx = 0; hopNext = "";
+        axisSum = {}; axisN = {}; axisLast = {}; myBalance = {};
+        renderScene(); showScreen('screen-scene');
+    }
+    function renderScene() {
+        const s = dungeonList[dungeonIdx];
+        document.getElementById('sc-progress').textContent = `場面 ${dungeonIdx + 1} / ${dungeonList.length}`;
+        document.getElementById('sc-emoji').textContent = s.emoji || "🗝️";
+        document.getElementById('sc-text').textContent = s.text;
+        document.getElementById('sc-b0').textContent = s.posFirst ? s.cp : s.cn;
+        document.getElementById('sc-b1').textContent = s.posFirst ? s.cn : s.cp;
+        document.getElementById('sc-area').textContent = AREAS[s.axis].name;
+        document.getElementById('sc-stage').style.background = AREAS[s.axis].bg;
+        document.getElementById('sc-char').innerHTML = `<div class="${hopNext}">${eggSvg()}</div>`;
+        document.getElementById('sc-track').innerHTML = dungeonList.map((_, i) => `<i class="${i < dungeonIdx ? "d" : i === dungeonIdx ? "c" : ""}"></i>`).join("");
+        hopNext = "";
+    }
+    function answerScene(k) {
+        const s = dungeonList[dungeonIdx], chosenPos = (k === 0) === s.posFirst, v = chosenPos ? 2 : -2;
+        SFX.tap(v);
+        const g = s.axis, d = s.pos === g[0] ? v : -v;
+        axisSum[g] = (axisSum[g] || 0) + d; axisN[g] = (axisN[g] || 0) + 1;
+        axisLast[g] = d > 0 ? g[0] : g[1];
+        hopNext = chosenPos ? "hopL" : "hopR";
+        dungeonIdx++;
+        if (dungeonIdx < dungeonList.length) renderScene(); else calculateTypeResult();
+    }
+
     // ---------- 招待リンク（?a=タイプ。タイプ記号だけをURLに入れる） ----------
     let inviteFrom = null, inviteMode = false;
     function parseInvite() {
@@ -1529,7 +1654,7 @@
         document.getElementById('invite-text').textContent = `${c.name}（${inviteFrom}）から、相性を測ろうと誘われています！`;
         box.style.display = '';
     }
-    function inviteDiagnose() { inviteMode = true; startDiagnosis(); }
+    function inviteDiagnose() { inviteMode = true; if (featureOn('dungeon')) startDungeon(); else startDiagnosis(); }
     function inviteChoose() {
         document.getElementById('typeA').value = inviteFrom;
         showScreen('screen-compat');
@@ -1858,6 +1983,7 @@
     }
 
     // ?op=0 を付けるとオープニングを飛ばす（テスト・共有リンク用）。他の変数の宣言がすべて終わった、スクリプトの最後で行う
+    renderFeatures();
     inviteFrom = parseInvite();
     if (inviteFrom) renderInvite();
     // ?op=0、または有効な招待リンク（?a=）のときはオープニングを飛ばす
