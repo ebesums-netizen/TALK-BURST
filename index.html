@@ -310,8 +310,14 @@
         <h3 style="margin-top:16px;">🏅 称号</h3>
         <div id="dex-titles" class="result-box"></div>
         <button class="btn-secondary" onclick="showScreen('screen-menu')">トップに戻る</button>
-        <button class="btn-secondary" onclick="exportCode()">📤 引き継ぎコードを作る</button>
-        <button class="btn-secondary" onclick="importCode()">📥 コードを読み込む</button>
+        <button class="btn-secondary" onclick="openCodePanel('make')">📤 引き継ぎコードを作る</button>
+        <button class="btn-secondary" onclick="openCodePanel('load')">📥 コードを読み込む</button>
+        <div id="code-panel" class="result-box" style="display:none; margin-top:10px;">
+            <p id="code-title" style="font-weight:bold; margin:0 0 6px;"></p>
+            <textarea id="code-box" rows="5" spellcheck="false" autocapitalize="off" autocorrect="off" style="width:100%; box-sizing:border-box; font-size:0.75rem; word-break:break-all; background:#1c1c2a; color:#eee; border:1px solid #444; border-radius:6px; padding:6px;"></textarea>
+            <button id="code-act" onclick="codeAction()" style="margin-top:6px;"></button>
+            <p id="code-msg" class="note" style="margin:6px 0 0;"></p>
+        </div>
         <button class="btn-secondary" onclick="resetDex()">記録を消す</button>
     </div>
 
@@ -1446,24 +1452,67 @@
     let state = loadState(), dex = state.dex;
     function saveState() { try { localStorage.setItem(STATE_KEY, JSON.stringify(state)); } catch (e) {} }
     function saveDex() { state.dex = dex; saveState(); }
-    // 引き継ぎコード（機種変更用）。TB2- ＋ 保存データのJSONをbase64にしたもの
-    function makeCode() { return "TB2-" + btoa(unescape(encodeURIComponent(JSON.stringify(state)))); }
-    function readCode(code) {
-        code = String(code || "").trim();
-        if (!/^TB2-[A-Za-z0-9+/=]+$/.test(code) || code.length > 1500000) return null;
-        try { return sanitizeState(JSON.parse(decodeURIComponent(escape(atob(code.slice(4)))))); } catch (e) { return null; }
+    // 引き継ぎコード（機種変更用）。形式: TB2-（保存データのJSONをbase64にしたもの）-（末尾の確認印6文字）
+    // 確認印は、途中で切れたコード・文字が変わったコードを見分けるためのもの。確認印のない古い形式のコードも読める
+    function codeSum(s) { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return ("0000000" + h.toString(36)).slice(-6); }
+    function makeCode() { const body = "TB2-" + btoa(unescape(encodeURIComponent(JSON.stringify(state)))); return body + "-" + codeSum(body); }
+    const CODE_MSG = {
+        empty: "コードを貼り付けてください。",
+        format: "コードの形式が違います。「TB2-」で始まるコードを、最後まですべてコピーしてください。",
+        check: "コードが途中で切れているか、文字が変わっています。もう一度、最後までコピーして貼り付けてください。",
+        content: "コードの中身を読み取れませんでした。"
+    };
+    function readCodeDetail(raw) {   // { ok, st } か { ok:false, reason }
+        let code = String(raw == null ? "" : raw).normalize("NFKC").replace(/\s+/g, "");   // 改行・空白・全角文字が混ざっても読める
+        if (!code) return { ok: false, reason: "empty" };
+        if (code.length > 1500000 || code.indexOf("TB2-") !== 0) return { ok: false, reason: "format" };
+        let body = code, sum = null;
+        const i = code.lastIndexOf("-");
+        if (i > 3 && code.length - i === 7) { body = code.slice(0, i); sum = code.slice(i + 1); }
+        if (!/^TB2-[A-Za-z0-9+/=]+$/.test(body)) return { ok: false, reason: sum === null && /^TB2-[A-Za-z0-9+/=]*-/.test(code) ? "check" : "format" };
+        if (sum !== null && sum !== codeSum(body)) return { ok: false, reason: "check" };
+        let obj;
+        try { obj = JSON.parse(decodeURIComponent(escape(atob(body.slice(4))))); } catch (e) { return { ok: false, reason: sum === null ? "check" : "content" }; }
+        const st = sanitizeState(obj);
+        return st ? { ok: true, st } : { ok: false, reason: "content" };
     }
-    async function exportCode() {
-        const code = makeCode();
-        try { await navigator.clipboard.writeText(code); alert("引き継ぎコードをコピーしました。新しい端末の「コードを読み込む」に貼り付けてください。"); }
-        catch (e) { prompt("このコードをコピーして、新しい端末で読み込んでください", code); }
+    function readCode(code) { const r = readCodeDetail(code); return r.ok ? r.st : null; }
+    const gardenDaysIn = st => Object.keys(st.garden.days).filter(k => Object.keys(st.garden.days[k]).length > 0).length;
+    function stateSummary(st) { return `図鑑 ${cnt(st.dex.types)}/${ALL_TYPES.length}タイプ・相性 ${cnt(st.dex.pairs)}組・庭 ${gardenDaysIn(st)}日・絆 ${cnt(st.bond)}組・称号 ${st.dex.titles.length}個`; }
+    // 引き継ぎの画面（図鑑画面の下）。コードは枠に表示してコピーできる。貼り付けも枠に入れる
+    let codeMode = "";
+    function openCodePanel(mode) {
+        codeMode = mode;
+        const box = document.getElementById('code-box'), act = document.getElementById('code-act'), msg = document.getElementById('code-msg');
+        document.getElementById('code-panel').style.display = '';
+        if (mode === "make") {
+            const code = makeCode();
+            document.getElementById('code-title').textContent = "📤 引き継ぎコード";
+            box.readOnly = false; box.value = code; box.readOnly = true; act.textContent = "📋 コピー";
+            msg.textContent = `コードの長さ ${code.length}文字。コピーして、新しい端末の「コードを読み込む」に貼り付けてください。`;
+            try { box.focus(); box.setSelectionRange(0, code.length); } catch (e) {}
+        } else {
+            document.getElementById('code-title').textContent = "📥 コードを読み込む";
+            box.readOnly = false; box.value = ""; act.textContent = "📥 読み込む";
+            msg.textContent = "コピーしたコードを枠に貼り付けて、「読み込む」を押してください。今の記録は置き換わります。";
+        }
     }
-    function importCode() {
-        const code = prompt("引き継ぎコードを貼り付けてください（今の記録は置き換わります）");
-        if (code === null) return;
-        const st = readCode(code);
-        if (!st) { alert("コードを読み込めませんでした。コピーし直してください。"); return; }
-        state = st; dex = state.dex; saveState(); showDex();
+    async function codeAction() {
+        const box = document.getElementById('code-box'), msg = document.getElementById('code-msg');
+        if (codeMode === "make") {
+            try { await navigator.clipboard.writeText(box.value); msg.textContent = "✅ コピーしました。メモなどに貼り付けて、控えておくと安心です。"; }
+            catch (e) { try { box.focus(); box.setSelectionRange(0, box.value.length); } catch (e2) {} msg.textContent = "自動でコピーできませんでした。枠のコードを長押しして、コピーしてください。"; }
+            return;
+        }
+        const r = readCodeDetail(box.value);
+        if (!r.ok) { msg.textContent = "⚠ " + CODE_MSG[r.reason]; return; }
+        const now = stateSummary(state), nxt = stateSummary(r.st);
+        const less = cnt(r.st.dex.types) < cnt(state.dex.types) || gardenDaysIn(r.st) < gardenDaysIn(state) || cnt(r.st.dex.pairs) < cnt(state.dex.pairs);
+        if (!confirm((less ? "⚠ 読み込む記録は、今の記録より少ない内容です。\n\n" : "") + `今の記録:\n${now}\n\n読み込む記録:\n${nxt}\n\n今の記録は置き換わります。よろしいですか？`)) { msg.textContent = "読み込みを取りやめました。今の記録はそのままです。"; return; }
+        state = r.st; dex = state.dex; saveState(); showDex();
+        document.getElementById('code-panel').style.display = '';
+        document.getElementById('code-title').textContent = "📥 コードを読み込む";
+        box.value = ""; msg.textContent = "✅ 読み込みました。（" + nxt + "）";
     }
     const cnt = o => Object.keys(o).length;
     // [称号名, 条件の説明, 判定]
