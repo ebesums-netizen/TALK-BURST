@@ -1038,6 +1038,11 @@
         for (let y = 0; y < g.length; y++) { let x = 0; while (x < g[y].length) { const c = g[y][x]; if (!c) { x++; continue; } let w = 1; while (x + w < g[y].length && g[y][x + w] === c) w++; r += `<rect x="${(x - ox) * px}" y="${(y - oy) * px}" width="${w * px}" height="${px}" fill="${c}"/>`; x += w; } }
         return r;
     }
+    function gridPaths(g) {   // 色ごとに1本のパスにまとめる（細かい格子でもSVGが軽くなる）
+        const by = {};
+        for (let y = 0; y < g.length; y++) { let x = 0; while (x < g[y].length) { const c = g[y][x]; if (!c) { x++; continue; } let w = 1; while (x + w < g[y].length && g[y][x + w] === c) w++; (by[c] = by[c] || []).push(`M${x} ${y}h${w}v1h-${w}z`); x += w; } }
+        return Object.keys(by).map(c => `<path fill="${c}" d="${by[c].join("")}"/>`).join("");
+    }
     function eggSvg(stage, cls) {
         return `<svg class="${cls === undefined ? "eg" : cls}" width="130" viewBox="0 0 ${EGW} ${EGH}" shape-rendering="crispEdges" role="img" aria-label="卵">${gridRects(eggGrid(stage), 0, 0, 1)}</svg>`;
     }
@@ -1109,7 +1114,111 @@
         for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (!out[y][x] && aura[y][x]) out[y][x] = aura[y][x];
         return `<svg class="${first ? "pop" : ""}" width="160" viewBox="-5 -5 170 233.75" shape-rendering="crispEdges" role="img" aria-label="孵化したキャラクター">${shadow}${gridRects(out, ox, oy, 5)}</svg>`;
     }
-    function heroSvg(c, t, mode, first) {
+    function heroGrid2(c, t, mode, AUR, ETO, EMB, K, R) {
+        K = K || 1; R = R || 1;   // K＝頭の拡大率、R＝格子の細かさ（1＝今と同じ。1.5や2にすると、同じ大きさのまま、ドットが細かくなって曲線がなめらかになる）
+        const Wd = 34, Hd = 46.75, ox = 1, oy = 3, OUT = "#2f2540", W = Math.ceil(Wd * R), H = Math.ceil(Hd * R), g = Array.from({ length: H }, () => Array(W).fill(null));
+        const RT = Math.max(1, Math.round(R * 0.9)), ST = Math.max(1, Math.round(R * 0.75));   // 輪郭の太さ・ハイライトと影の太さ（細かい格子の何マスか）
+        const s = { EI: c.t[0], SN: c.t[1], TF: c.t[2], JP: c.t[3] }, z = c.eto;
+        const SK = c.skin || "#ffd9b8", HC = c.hair || "#4a3326", p = t % 4, run = mode === "run", idle = mode === "idle", walk = mode === "walk";
+        const dy = idle ? (t % 8 < 4 ? 0 : 1) : (run ? (p % 2 ? -1 : 0) : (p % 2 ? 0 : 1));
+        const hex = k => [1, 3, 5].map(i => parseInt(k.slice(i, i + 2), 16)), mix = (k, to, f) => { const a = hex(k), b = hex(to); return "#" + a.map((v, i) => Math.round(v + (b[i] - v) * f).toString(16).padStart(2, "0")).join(""); };
+        // 頭は「あごの位置」を中心にK倍、体は地面を基準に縮める。設計の座標は今までと同じ（34×48）で、細かい格子 R 倍に描く
+        const HT = { kx: K, ky: K, x0: 16, y0: 24, tx: 16, ty: K === 1 ? 24 : 28.2 }, BT = K === 1 ? { kx: 1, ky: 1, x0: 16, y0: 41, tx: 16, ty: 41 } : { kx: 0.92, ky: 1 - (K - 1) * 0.62, x0: 16, y0: 41, tx: 16, ty: 41 };
+        const ID = { kx: 1, ky: 1, x0: 0, y0: 0, tx: 0, ty: 0 }; let TT = ID; const useHead = () => { TT = HT; }, useBody = () => { TT = BT; }, useID = () => { TT = ID; };
+        const fx = x => TT.tx + (x - TT.x0) * TT.kx, fy = y => TT.ty + (y - TT.y0) * TT.ky;
+        const putC = (X, Y, k) => { if (X >= 0 && X < W && Y >= 0 && Y < H && k) g[Y][X] = k; };
+        const cellsOf = (shape) => { const m = new Map(); const add = (X, Y, k) => m.set(X + "," + Y, [X, Y, k]);
+            if (Array.isArray(shape)) shape.forEach(([x, y, w, h, k]) => { const xa = Math.round((fx(x) + ox) * R), xb = Math.max(xa + 1, Math.round((fx(x + w) + ox) * R)), ya = Math.round((fy(y) + oy) * R), yb = Math.max(ya + 1, Math.round((fy(y + h) + oy) * R)); for (let j = ya; j < yb; j++) for (let i = xa; i < xb; i++) add(i, j, k); });
+            else { const xa = Math.floor((fx(shape.x0) + ox) * R) - 2, xb = Math.ceil((fx(shape.x1) + ox) * R) + 2, ya = Math.floor((fy(shape.y0) + oy) * R) - 2, yb = Math.ceil((fy(shape.y1) + oy) * R) + 2;
+                for (let Y = ya; Y <= yb; Y++) for (let X = xa; X <= xb; X++) { const k = shape.fn(TT.x0 + ((X + 0.5) / R - ox - TT.tx) / TT.kx, TT.y0 + ((Y + 0.5) / R - oy - TT.ty) / TT.ky); if (k) add(X, Y, k); } }
+            return m; };
+        const draw = (shape, o = {}) => { const m = cellsOf(shape), has = (X, Y) => m.has(X + "," + Y), D = Math.round((o.dy || 0) * R);
+            if (o.ol !== false) { let ring = new Set(); let front = [...m.values()].map(([X, Y]) => [X, Y]); const seen = new Set(m.keys());
+                for (let r = 0; r < RT; r++) { const nxt = []; front.forEach(([X, Y]) => { [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([a, b]) => { const kk = (X + a) + "," + (Y + b); if (!seen.has(kk)) { seen.add(kk); ring.add(kk); nxt.push([X + a, Y + b]); } }); }); front = nxt; }
+                ring.forEach(kk => { const [X, Y] = kk.split(",").map(Number); putC(X, Y + D, OUT); }); }
+            m.forEach(([X, Y, k]) => { let v = k; if (o.shade !== false) { let top = false, bot = false; for (let j = 1; j <= ST; j++) { if (!has(X, Y - j) || !has(X - j, Y)) top = true; if (!has(X, Y + j) || !has(X + j, Y)) bot = true; } if (top) v = mix(k, "#ffffff", o.hl || 0.24); else if (bot) v = mix(k, "#1a1030", o.sd || 0.16); } putC(X, Y + D, v); }); };
+        const ell = (cx, cy, a, b, k, clip) => ({ x0: Math.floor(cx - a), x1: Math.ceil(cx + a), y0: Math.floor(cy - b), y1: Math.ceil(cy + b), fn: (x, y) => (((x - cx) / a) ** 2 + ((y - cy) / b) ** 2 <= 1 && (!clip || clip(x, y))) ? k : null });
+        const px = (x, y, k, d) => { if (!k) return; const X0 = Math.round((fx(x) + ox) * R), X1 = Math.max(X0 + 1, Math.round((fx(x + 1) + ox) * R)), Y0 = Math.round((fy(y) + oy) * R) + Math.round((d || 0) * R), Y1 = Math.max(Y0 + 1, Math.round((fy(y + 1) + oy) * R) + Math.round((d || 0) * R)); for (let Y = Y0; Y < Y1; Y++) for (let X = X0; X < X1; X++) putC(X, Y, k); };
+        // --- オーラ・影 ---
+        useID();
+        [[3, 6], [27, 10], [1, 26], [28, 32], [5, 40], [26, 2]].forEach((q, i) => { if ((t + i) % 3) { px(q[0], q[1], c.aura); px(q[0] + 1, q[1], c.aura); px(q[0], q[1] + 1, c.aura); px(q[0] + 1, q[1] + 1, c.aura); } });
+        // --- 足 ---
+        useBody();
+        let lh = 7, rh = 7, lx = 12, rx = 17;
+        if (walk) { if (p === 1) lh = 5; if (p === 3) rh = 5; } if (run) { lx = 10; rx = 19; if (p % 2) lh = 6; else rh = 6; }
+        const LEG = "#4a4468";
+        [[lx, lh], [rx, rh]].forEach(([x, h]) => { draw([[x, 33, 3, h, LEG]], { hl: 0.18 }); if (s.SN === "S") draw([[x - 1, 31 + h, 5, 3, "#9a6a46"]], {}); else draw([[x, 32 + h, 3, 2, SK]], {}); });
+        // --- 後ろのもの（羽・マント・しっぽ・後ろ髪）---
+        if (s.SN === "N") { const k = "#c3d8ff", wing = (cx, dir) => ({ x0: 0, x1: 33, y0: 15, y1: 36, fn: (x, y) => { const lobe = (ox, oy, a, b) => (((x - (cx + dir * ox)) / a) ** 2 + ((y - oy) / b) ** 2 <= 1); return (lobe(0, 22, 3.4, 2.3) || lobe(1.4, 25.4, 3.6, 2.3) || lobe(2.2, 28.8, 3.4, 2.2) || lobe(0.6, 31.6, 2.4, 1.6)) ? k : null; } });
+            draw(wing(6, -1), { dy }); draw(wing(26, 1), { dy }); }
+        if (s.TF === "F") draw({ x0: 8, x1: 23, y0: 24, y1: 37, fn: (x, y) => (x >= 8 + (y - 24) * 0.05 && x <= 23 - (y - 24) * 0.0) ? "#f28cab" : null }, { dy });
+        const tw = (t % 4 < 2) ? 0 : -1;
+        if (z) { const tc = z[4], k = z[3], T = [];
+            if (k === "cat") T.push([22, 30 + tw, 2, 2, tc], [24, 28 + tw, 2, 3, tc], [25, 26 + tw, 2, 3, tc]);
+            if (k === "dog") T.push([22, 30, 3, 2, tc], [24, 28 + tw, 2, 3, tc]);
+            if (k === "puff") T.push([21, 31, 3, 3, tc]);
+            if (k === "dra") T.push([22, 33, 5, 2, tc], [27, 32 + tw, 2, 2, tc]);
+            if (k === "rat") T.push([22, 34, 3, 1, tc], [25, 33, 2, 1, tc], [27, 31 + tw, 1, 3, tc], [28, 30 + tw, 1, 1, tc]);
+            if (k === "mnk") T.push([22, 32, 3, 2, tc], [25, 27 + tw, 2, 7, tc], [23, 25 + tw, 3, 2, tc], [23, 27 + tw, 1, 1, tc]);
+            if (k === "pig") T.push([21, 32, 2, 2, tc], [23, 31, 2, 1, tc], [24, 32, 1, 2, tc], [23, 34, 2, 1, tc]);
+            if (T.length) draw(T, { dy }); }
+        useHead();
+        if (c.gender === "f") draw(ell(16, 22, 9.2, 10.5, HC), { dy });
+        // --- 体 ---
+        useBody();
+        const tun = s.EI === "E" ? "#f2994a" : "#6c7bd9", tun2 = s.EI === "E" ? "#c77626" : "#4c59ad";
+        let aL = 0, aR = 0; if (walk) { aL = p === 1 ? 1 : p === 3 ? -1 : 0; aR = -aL; } if (run) { aL = p % 2 ? -2 : 2; aR = -aL; }
+        draw([[9, 25 + aL, 2, 7, tun], [9, 32 + aL, 2, 2, SK]], { dy }); draw([[21, 25 + aR, 2, 7, tun], [21, 32 + aR, 2, 2, SK]], { dy });
+        draw([[11, 24, 10, 9, tun], [11, 31, 10, 2, tun2]], { dy });
+        if (c.blood) draw([[12, 23, 8, 2, { A: "#4fa3e0", B: "#e0574f", O: "#e8c14a", AB: "#8f5bd6" }[c.blood]]], { dy, hl: 0.2 });
+        draw([[13, 25, 7, 5, "#3a3552"]], { dy, ol: false, shade: false });
+        (EMB[c.emb] || (c.aura === AUR.dark[1] ? EMB.dark : EMB.light)).forEach((row, i) => { for (let j = 0; j < 5; j++) if (row[j] === "#") px(14 + j, 25 + i, c.aura, dy); });
+        if (s.SN === "S") draw([[11, 30, 10, 1, "#8a5a3c"], [15, 30, 2, 1, "#ffd34e"]], { dy, ol: false });
+        // --- 頭 ---
+        useHead();
+        if (z && z[0]) { const k = z[0], e1 = z[1], e2 = z[2], E = [], I = [];
+            if (k === "pt") { [[10,9,5],[10,8,4],[10,7,3],[10,6,2],[17,9,5],[18,8,4],[19,7,3],[20,6,2]].forEach(a => E.push([a[0], a[1], a[2], 1, e1])); I.push([11, 8, 1, 1, e2], [20, 8, 1, 1, e2]); }
+            if (k === "lg") { E.push([11, 1, 3, 10, e1], [18, 1, 3, 10, e1]); I.push([12, 3, 1, 7, e2], [19, 3, 1, 7, e2]); }
+            if (k === "fl") E.push([6, 12, 3, 8, e1], [23, 12, 3, 8, e1]);
+            if (k === "hn") E.push([10, 6, 2, 5, e1], [20, 6, 2, 5, e1], [10, 5, 1, 1, e1], [21, 5, 1, 1, e1]);
+            if (k === "mo") { E.push([6, 6, 5, 5, e1], [21, 6, 5, 5, e1]); I.push([7, 7, 3, 3, e2], [22, 7, 3, 3, e2]); }
+            if (k === "mk") { E.push([6, 13, 3, 5, e1], [23, 13, 3, 5, e1], [13, 8, 6, 2, e1]); I.push([7, 14, 1, 3, e2], [24, 14, 1, 3, e2]); }
+            if (k === "rd") { E.push([7, 10, 3, 3, e1], [22, 10, 3, 3, e1]); I.push([8, 11, 1, 1, e2], [23, 11, 1, 1, e2]); }
+            if (k === "bo") { E.push([9, 7, 3, 3, e1], [20, 7, 3, 3, e1]); I.push([10, 8, 1, 1, e2], [21, 8, 1, 1, e2]); }
+            if (k === "dr") E.push([10, 5, 2, 6, e1], [8, 4, 2, 2, e1], [20, 5, 2, 6, e1], [22, 4, 2, 2, e1], [9, 2, 1, 2, e1], [22, 2, 1, 2, e1]);
+            if (k === "cb") E.push([14, 5, 4, 3, "#e0403a"], [15, 4, 2, 1, "#e0403a"]);
+            if (E.length) { draw(E, { dy }); if (I.length) draw(I, { dy, ol: false, shade: false }); } }
+        draw(ell(16, 16.5, 8.1, 7.6, SK), { dy });
+        const side = c.gender === "f" ? 6 : c.gender === "n" ? 8 : c.gender === "m" ? 3 : 4;
+        const hairCap = ell(16, 13.6, 8.9, 7.1, HC, (x, y) => { const d = Math.abs(x - 16); const lim = d <= 1 ? 14 : d <= 3 ? 15 : d <= 5 ? 16 : d <= 6 ? 15 : 15 + side; return y <= lim; });
+        draw(hairCap, { dy, ol: false });
+        if (s.JP === "J") { const rows = []; for (let y = 2; y <= 8; y++) { const hw = 1.2 + (y - 2) * 0.72; rows.push([Math.round(16 - hw), y, Math.round(hw * 2), 1, "#6b4fd8"]); }
+            draw(rows, { dy }); draw([[11, 8, 10, 1, "#ffd34e"]], { dy, ol: false, shade: false }); draw([[8, 9, 16, 2, "#523ac0"]], { dy }); }
+        if (s.JP === "P") { draw([[16, 5, 1, 5, HC], [17, 4, 1, 1, HC]], { dy, hl: 0.1 }); draw([[18, 2, 3, 3, "#ffd34e"]], { dy }); }
+        // 顔
+        const blink = (t % 20 === 0 && !idle) || t % 24 === 0;
+        const eye = (x) => { if (blink) { draw([[x, 19, 3, 1, "#2b1d33"]], { dy, ol: false, shade: false }); return; }
+            draw([[x, 16, 3, 4, "#2b1d33"]], { dy, ol: false, shade: false }); px(x, 16, SK, dy); px(x + 2, 16, SK, dy); px(x, 19, SK, dy); px(x + 2, 19, SK, dy);
+            px(x + 1, 17, mix(c.aura, "#ffffff", 0.3), dy); px(x + 1, 18, mix(c.aura, "#ffffff", 0.3), dy); px(x, 17, "#ffffff", dy); px(x, 16, "#2b1d33", dy); px(x + 2, 19, "#ffffff", dy); };
+        eye(11); eye(19);
+        const ck = c.gender === "f" ? "#ff8fa3" : "#ffa6a6"; px(10, 20, ck, dy); px(11, 20, ck, dy); px(21, 20, ck, dy); px(22, 20, ck, dy);
+        if (s.EI === "E") { draw([[15, 21, 3, 1, "#7a2a3a"], [16, 22, 1, 1, "#7a2a3a"]], { dy, ol: false, shade: false }); px(16, 22, "#ff8a9a", dy); } else { px(15, 21, "#7a3a4a", dy); px(16, 21, "#7a3a4a", dy); px(17, 21, "#7a3a4a", dy); }
+        if (z && z[0] === "bo") { draw([[14, 20, 5, 3, "#f0a0b0"]], { dy, ol: false }); px(15, 21, OUT, dy); px(17, 21, OUT, dy); px(12, 22, "#fff", dy); px(12, 23, "#fff", dy); px(20, 22, "#fff", dy); px(20, 23, "#fff", dy); }
+        if (z && z[0] === "mo") { const wc = "#8a8a98"; [[5,19],[5,21],[22,19],[22,21]].forEach(([x, y]) => { px(x, y, wc, dy); px(x + 1, y, wc, dy); px(x + 2, y, wc, dy); px(x + 3, y, wc, dy); }); }
+        if (s.TF === "T") { const gk = "#3b6fd8"; const ring = (x0) => { [[x0, 15, 5, 1], [x0, 20, 5, 1], [x0, 15, 1, 6], [x0 + 4, 15, 1, 6]].forEach(([x, y, w, h]) => draw([[x, y, w, h, gk]], { dy, ol: false, shade: false })); }; ring(10); ring(18); px(15, 17, gk, dy); px(16, 17, gk, dy); px(17, 17, gk, dy);
+            useBody(); draw([[23, 19, 1, 21, "#8a5a3c"]], { dy, shade: false }); draw(ell(23.5, 16.5, 2.3, 2.6, "#5aa7ff"), { dy }); px(22, 15, "#d8ecff", dy); px(22, 16, "#d8ecff", dy); useHead(); }
+        if (s.TF === "F") { const hc = "#f0507a"; draw([[24, 6, 2, 1, hc], [27, 6, 2, 1, hc], [24, 7, 5, 1, hc], [25, 8, 3, 1, hc], [26, 9, 1, 1, hc]], { dy, hl: 0.3 }); }
+        return g;
+    }
+
+    function heroSvg2(c, t, mode, first) {   // 新デザイン：頭が大きく、ドットが細かい。縦横比は元の絵と同じ（160:220）
+        const R = TB_CONFIG.HERO_RES, g = heroGrid2(c, t, mode, AUR, ETO, EMB, TB_CONFIG.HERO_HEAD_SCALE, R), W = g[0].length;
+        const shadow = `<ellipse cx="${(16 + 1) * R}" cy="${(41 + 3) * R}" rx="${8 * R}" ry="${1.2 * R}" fill="#000" fill-opacity=".12"/>`;
+        return `<svg class="${first ? "pop" : ""}" width="160" viewBox="0 0 ${W} ${W * 220 / 160}" shape-rendering="crispEdges" role="img" aria-label="孵化したキャラクター">${shadow}${gridPaths(g)}</svg>`;
+    }
+    function heroSvg(c, t, mode, first) { return featureOn('hero2') ? heroSvg2(c, t, mode, first) : heroSvgV1(c, t, mode, first); }
+
+    function heroSvgV1(c, t, mode, first) {
         const s = { EI: c.t[0], SN: c.t[1], TF: c.t[2], JP: c.t[3] }, z = c.eto, M = [], L = [], A = [];
         const OL = "#2f2540", SK = c.skin || "#ffd9b8", HC = c.hair || "#4a3326", p = t % 4, run = mode === "run", idle = mode === "idle";
         const R = (a, x, y, w, h, col) => a.push([x, y, w, h, col]);   // 部品を記録しておき、最後にまとめて描く（外側の輪郭を付けるため）
@@ -1426,7 +1535,7 @@
     // ---------- 図鑑・称号・鏡像・揺らぎ・17番目の欠片（記録はこの端末の localStorage だけ） ----------
     // ---------- 調整用の設定（あとから使い心地を直すときは、まずここの数字とフラグを変える） ----------
     const TB_CONFIG = {
-        FEATURES: { dungeon: false, garden: false, persona: false, mission: false, arena: false, party: false },   // 段階ごとに true にして公開
+        FEATURES: { dungeon: false, garden: false, persona: false, mission: false, arena: false, party: false, hero2: false },   // 段階ごとに true にして公開
         SCENES_PER_AXIS: 5,      // ダンジョン診断：1軸の場面数（奇数＝同点が出ない）
         EDGE_MIN_AXES: 3,        // 揺らぎの称号：3対2の軸がこの数以上
         GARDEN_DIFF_PT: 30,      // 庭：今月と先月の傾きの差がこのpt以上の軸だけ「変化」として出す
@@ -1438,6 +1547,8 @@
         GARDEN_GRACE_DAYS: 7,        // 休んでも、この日数までは何も変わらない
         GARDEN_DECAY_PER_DAY: 0.25,  // それを超えた休み1日ごとに、各軸の累計がこれだけ戻る（休んだ2日につき、成長1日分＝0.5回が戻る）
         GARDEN_RECOVER: 1,           // 戻ったあと遊ぶと、1回答えるごとに、通常の+1に加えて、この数だけ取り戻す（＝2倍の速さ）
+        HERO_HEAD_SCALE: 1.25,   // キャラクター新デザイン（hero2）：頭の大きさ（1＝元のまま。大きいほど、丸いチビ体型）
+        HERO_RES: 2,             // 同：ドットの細かさ（1＝元と同じ。2にすると、曲線がなめらかになる）
         GARDEN_SCENERY_DAYS: [7, 30, 100],   // 庭の景色が増える、記録した日数
         BOND_LEVELS: [0, 3, 8, 15, 25]   // 絆レベル1〜5に必要なポイント
     };
