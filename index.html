@@ -1329,16 +1329,16 @@
         g.imageSmoothingEnabled = false;
         if (kind === "my") {
             const d = shareData.my;
-            cardBase(g, W, H, 700);
-            g.drawImage(await svgToImage(heroSvg(d.cfg, 0, "idle", false)), 300, 212, 480, 660);
+            cardBase(g, W, H, 770);   // 絵を大きく見せるため、枠を高くした（元は700）
+            g.drawImage(await svgToImage(heroSvg(d.cfg, 0, "idle", false)), 270, 208, 540, 743);   // 元は 480×660
             g.fillStyle = "#ffffff";
             let fs = 56; g.font = `bold ${fs}px ${F}`;
             while (fs > 34 && g.measureText(d.title).width > 900) { fs -= 2; g.font = `bold ${fs}px ${F}`; }   // 長いタイトルは文字を小さくして1行に収める
-            let y = wrapText(g, d.title, W / 2, 960, 900, Math.round(fs * 1.25), 2);
-            g.font = `38px ${F}`; g.fillStyle = "#ffd34e"; g.fillText(`${d.type}　${d.extra}`, W / 2, y + 20);
-            g.font = `bold 32px ${F}`; g.fillStyle = "#6ee7b7"; g.fillText(`副業：${d.sideJob}`, W / 2, y + 72);
-            let yy = y + 132;
-            if (d.saying) { g.font = `bold 34px ${F}`; g.fillStyle = "#ffffff"; yy = wrapText(g, `口癖「${d.saying}」`, W / 2, yy, 900, 44, 2) + 4; }
+            let y = wrapText(g, d.title, W / 2, 1020, 900, Math.round(fs * 1.2), 2);
+            g.font = `38px ${F}`; g.fillStyle = "#ffd34e"; g.fillText(`${d.type}　${d.extra}`, W / 2, y + 12);
+            g.font = `bold 32px ${F}`; g.fillStyle = "#6ee7b7"; g.fillText(`副業：${d.sideJob}`, W / 2, y + 60);
+            let yy = y + 112;
+            if (d.saying) { g.font = `bold 34px ${F}`; g.fillStyle = "#ffffff"; yy = wrapText(g, `口癖「${d.saying}」`, W / 2, yy, 900, 42, 2) + 2; }
             if (d.weak && yy + 40 <= 1296) { g.font = `32px ${F}`; g.fillStyle = "#ff9b9b"; wrapText(g, `弱点：${d.weak}`, W / 2, yy, 900, 42, 1); }
         } else {
             const d = shareData.compat;
