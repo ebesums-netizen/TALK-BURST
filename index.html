@@ -149,6 +149,7 @@
         @keyframes eh { 0%,100% { transform: translateY(0) scale(1.06,.9); } 50% { transform: translateY(-26px) scale(.95,1.05); } }
         .eg { display: block; margin: 0 auto; transform-origin: 50% 100%; animation: eh .8s ease-in-out infinite; }
         #q-char { padding-top: 30px; } #my-char { padding-top: 8px; }
+        #my-char svg:not([class*="eg"]) { width: 230px; }   /* 判定職種の画面のキャラクターを大きく（卵は今のまま） */
         .modes { display: flex; gap: 6px; justify-content: center; margin: 0 0 10px; }
         .modes button { width: auto; margin: 0; padding: 6px 14px; font-size: 0.85rem; }
         @media (prefers-reduced-motion: reduce) { .eg { animation: none; } }
@@ -156,7 +157,7 @@
         .gauge { position: relative; height: 22px; border: 2px solid #555; border-radius: 6px; background: #2a2a3a; margin: 0 0 12px; overflow: hidden; }
         .gauge i { display: block; height: 100%; width: 100%; background: var(--danger-color); }
         .gauge b { position: absolute; inset: 0; text-align: center; font-size: 0.8rem; line-height: 22px; color: #fff; }
-        #my-char { min-height: 240px; display: flex; align-items: flex-end; justify-content: center; }
+        #my-char { min-height: 300px; display: flex; align-items: flex-end; justify-content: center; }
         @keyframes shk { 0%,100% { transform: rotate(0); } 25% { transform: rotate(-7deg); } 75% { transform: rotate(7deg); } }
         .shake { animation: shk .35s infinite; transform-origin: 50% 100%; } .shake2 { animation: shk .16s infinite; transform-origin: 50% 100%; }
         @keyframes flsh { 0% { filter: brightness(3); } 100% { filter: none; } }
@@ -1537,9 +1538,9 @@
 
     // ---------- 図鑑・称号・鏡像・揺らぎ・17番目の欠片（記録はこの端末の localStorage だけ） ----------
     // ---------- 調整用の設定（あとから使い心地を直すときは、まずここの数字とフラグを変える） ----------
-    const APP_VERSION = "2026-11-26b";   // 画面の下に小さく表示。上書きが反映されたかの確認用
+    const APP_VERSION = "2026-11-26c";   // 画面の下に小さく表示。上書きが反映されたかの確認用
     const TB_CONFIG = {
-        FEATURES: { dungeon: false, garden: false, persona: false, mission: false, arena: false, party: false, hero2: false },   // 段階ごとに true にして公開
+        FEATURES: { dungeon: false, garden: false, persona: false, mission: false, arena: false, party: false, hero2: true },   // hero2（キャラクター新デザイン）は初期ON。元の絵に戻すときは、Config の hero2 を FALSE にする。他の機能は、段階ごとに true にして公開
         SCENES_PER_AXIS: 5,      // ダンジョン診断：1軸の場面数（奇数＝同点が出ない）
         EDGE_MIN_AXES: 3,        // 揺らぎの称号：3対2の軸がこの数以上
         GARDEN_DIFF_PT: 30,      // 庭：今月と先月の傾きの差がこのpt以上の軸だけ「変化」として出す
