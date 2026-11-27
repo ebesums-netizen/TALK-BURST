@@ -456,6 +456,7 @@
     </div>
 
     <p class="disclaimer">※ このアプリはエンターテインメント目的の独自診断です。公式の性格検査・心理検査とは関係がなく、結果は公式の検査結果と異なる場合があります。診断結果の科学的・心理学的な正確さを保証するものではありません。</p>
+    <p class="disclaimer" id="app-version" style="margin-top:4px;"></p>
 </div>
 
 <script>
@@ -1329,17 +1330,19 @@
         g.imageSmoothingEnabled = false;
         if (kind === "my") {
             const d = shareData.my;
-            cardBase(g, W, H, 770);   // 絵を大きく見せるため、枠を高くした（元は700）
-            g.drawImage(await svgToImage(heroSvg(d.cfg, 0, "idle", false)), 270, 208, 540, 743);   // 元は 480×660
+            const PH = TB_CONFIG.CARD_PANEL_H, hh = Math.round(PH - 27), hw = Math.round(hh * 160 / 220);   // 絵の高さは枠より少し小さく（元：枠700・絵660）
+            cardBase(g, W, H, PH);
+            g.drawImage(await svgToImage(heroSvg(d.cfg, 0, "idle", false)), Math.round((W - hw) / 2), Math.round(PH + 104 - 0.897 * hh), hw, hh);   // 足が地面の少し上に来るように位置を決める
             g.fillStyle = "#ffffff";
             let fs = 56; g.font = `bold ${fs}px ${F}`;
             while (fs > 34 && g.measureText(d.title).width > 900) { fs -= 2; g.font = `bold ${fs}px ${F}`; }   // 長いタイトルは文字を小さくして1行に収める
-            let y = wrapText(g, d.title, W / 2, 1020, 900, Math.round(fs * 1.2), 2);
-            g.font = `38px ${F}`; g.fillStyle = "#ffd34e"; g.fillText(`${d.type}　${d.extra}`, W / 2, y + 12);
-            g.font = `bold 32px ${F}`; g.fillStyle = "#6ee7b7"; g.fillText(`副業：${d.sideJob}`, W / 2, y + 60);
-            let yy = y + 112;
-            if (d.saying) { g.font = `bold 34px ${F}`; g.fillStyle = "#ffffff"; yy = wrapText(g, `口癖「${d.saying}」`, W / 2, yy, 900, 42, 2) + 2; }
-            if (d.weak && yy + 40 <= 1296) { g.font = `32px ${F}`; g.fillStyle = "#ff9b9b"; wrapText(g, `弱点：${d.weak}`, W / 2, yy, 900, 42, 1); }
+            let y = wrapText(g, d.title, W / 2, 180 + PH + 70, 900, Math.round(fs * 1.2), 2);
+            g.font = `38px ${F}`; g.fillStyle = "#ffd34e"; g.fillText(`${d.type}　${d.extra}`, W / 2, y + 8);
+            g.font = `bold 32px ${F}`; g.fillStyle = "#6ee7b7"; g.fillText(`副業：${d.sideJob}`, W / 2, y + 50);
+            let yy = y + 96;
+            const LIM = 1262;   // これより下に文字を置かない（下の #TALKBURST と重ならないように）
+            if (d.saying && yy <= LIM) { g.font = `bold 34px ${F}`; g.fillStyle = "#ffffff"; yy = wrapText(g, `口癖「${d.saying}」`, W / 2, yy, 900, 40, yy + 40 <= LIM ? 2 : 1) + 2; }
+            if (d.weak && yy <= LIM) { g.font = `32px ${F}`; g.fillStyle = "#ff9b9b"; wrapText(g, `弱点：${d.weak}`, W / 2, yy, 900, 42, 1); }
         } else {
             const d = shareData.compat;
             cardBase(g, W, H, 540);
@@ -1534,6 +1537,7 @@
 
     // ---------- 図鑑・称号・鏡像・揺らぎ・17番目の欠片（記録はこの端末の localStorage だけ） ----------
     // ---------- 調整用の設定（あとから使い心地を直すときは、まずここの数字とフラグを変える） ----------
+    const APP_VERSION = "2026-11-26b";   // 画面の下に小さく表示。上書きが反映されたかの確認用
     const TB_CONFIG = {
         FEATURES: { dungeon: false, garden: false, persona: false, mission: false, arena: false, party: false, hero2: false },   // 段階ごとに true にして公開
         SCENES_PER_AXIS: 5,      // ダンジョン診断：1軸の場面数（奇数＝同点が出ない）
@@ -1547,6 +1551,7 @@
         GARDEN_GRACE_DAYS: 7,        // 休んでも、この日数までは何も変わらない
         GARDEN_DECAY_PER_DAY: 0.25,  // それを超えた休み1日ごとに、各軸の累計がこれだけ戻る（休んだ2日につき、成長1日分＝0.5回が戻る）
         GARDEN_RECOVER: 1,           // 戻ったあと遊ぶと、1回答えるごとに、通常の+1に加えて、この数だけ取り戻す（＝2倍の速さ）
+        CARD_PANEL_H: 800,       // 結果のシェア画像：絵の枠の高さ（元は700。大きいほど絵が大きく、下の文字の場所は狭くなる）
         HERO_HEAD_SCALE: 1.25,   // キャラクター新デザイン（hero2）：頭の大きさ（1＝元のまま。大きいほど、丸いチビ体型）
         HERO_RES: 2,             // 同：ドットの細かさ（1＝元と同じ。2にすると、曲線がなめらかになる）
         GARDEN_SCENERY_DAYS: [7, 30, 100],   // 庭の景色が増える、記録した日数
@@ -2502,6 +2507,7 @@
 
     // ?op=0 を付けるとオープニングを飛ばす（テスト・共有リンク用）。他の変数の宣言がすべて終わった、スクリプトの最後で行う
     renderFeatures();
+    document.getElementById('app-version').textContent = "版 " + APP_VERSION;
     inviteFrom = parseInvite();
     if (inviteFrom) renderInvite();
     // ?op=0、または有効な招待リンク（?a=）のときはオープニングを飛ばす
